@@ -3,6 +3,7 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 from rdflib import ConjunctiveGraph, Namespace, Literal, RDF, RDFS, BNode, URIRef
 import re
 import uuid
+import bz2
 
 class RuleMaker(object):
     namespaces = {
@@ -46,6 +47,7 @@ class RuleMaker(object):
         ?header <http://example.org/ns#subColHeaderOf> ?parent.
         }
         """.replace('GRAPH',namedgraph)
+        print query
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
@@ -68,7 +70,7 @@ class RuleMaker(object):
         Write the file to disk
         """
         file = bz2.BZ2File(filename, 'wb', compresslevel=9)
-        turtle = self.graph.serialize(destination=None, format=config.get('general', 'format'))
+        turtle = self.graph.serialize(destination=None, format='turtle')
         file.writelines(turtle)
         file.close()
         
@@ -81,13 +83,13 @@ class RuleMaker(object):
             
             # Women
             if label_clean == 'v' or label_clean == 'vrouwen' or label_clean == 'vrouwelijk geslacht':
-                self.create_rule_add_dimension(resource,
+                self.create_rule_add_dimension(URIRef(resource),
                                                self.namespaces['sdmx-dimension']['sex'],
                                                self.namespaces['sdmx-code']['sex-V'])
 
             # Man            
             if label_clean == 'm' or label_clean == 'mannen' or label_clean == 'mannelijk geslacht':
-                self.create_rule_add_dimension(resource,
+                self.create_rule_add_dimension(URIRef(resource),
                                                self.namespaces['sdmx-dimension']['sex'],
                                                self.namespaces['sdmx-code']['sex-M'])
     
@@ -110,7 +112,7 @@ class RuleMaker(object):
         Create a new harmonization rule that assign a dimension and value
         to all the observations having the target as a dimension
         """
-        resource = self.namespaces['rules'] + str(uuid.uuid1())
+        resource = URIRef(self.namespaces['rules'] + str(uuid.uuid1()))
         self.graph.add((resource,
                         RDF.type,
                         self.namespaces['harmonizer']['AddDimensionRule']))
@@ -129,7 +131,7 @@ if __name__ == '__main__':
     tables = [table.strip() for table in open('tables.txt')]
     for table in tables:
         namedgraph = 'http://example.com/graph/TABLE'.replace('TABLE', table)
-        r = RuleMaker(table, 'http://127.0.0.1:1234/sparql', namedgraph)
+        r = RuleMaker(table, 'http://127.0.0.1:1234/sparql/', namedgraph)
         r.go()
         r.saveTo('rules/' + table + '.ttl.bz2')
         
