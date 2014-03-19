@@ -8,7 +8,7 @@ import bz2
 import os.path
 
 class CubeMaker(object):
-    endpoint = 'http://127.0.0.1:1234/sparql/'
+    endpoint = 'http://lod.cedar-project.nl:8080/sparql/cedar'
     namespaces = {
       'dcterms':Namespace('http://purl.org/dc/terms/'), 
       'skos':Namespace('http://www.w3.org/2004/02/skos/core#'), 
@@ -47,7 +47,7 @@ class CubeMaker(object):
         """
         Process a single source of data
         """
-        namedgraph = 'http://example.com/graph/TABLE'.replace('TABLE', source)
+        namedgraph = 'http://lod.cedar-project.nl/resource/v2/TABLE'.replace('TABLE', source)
         rulesFile = 'rules/' + source + '.ttl.bz2'
         
         # Load the rules file
@@ -58,7 +58,7 @@ class CubeMaker(object):
         print "Loaded %d triple rules from %s" % (len(self.rules), rulesFile)
         
         # Load the tree of column headers
-        headers = {}
+        self.dimensions = {}
         sparql = SPARQLWrapper(self.endpoint)
         query = """
         select distinct ?header ?parent from <GRAPH> where {
@@ -72,18 +72,19 @@ class CubeMaker(object):
         for result in results["results"]["bindings"]:
             resource = result['header']['value']
             parent = result['parent']['value']
-            headers[parent] = {}
-            headers[parent].setdefault('child', []).append(resource)
+            self.dimensions[resource] = {}
+            self.dimensions[resource].setdefault('parent', []).append(parent)
         
         # TODO Associate the rules to the tree of headers under 'rules' array
-             
+        
+        return     
         # Get all the observations
         sparql = SPARQLWrapper(self.endpoint)
         observations = []
         query = """
         select distinct ?obs from <GRAPH> where {
         ?obs a <http://purl.org/linked-data/cube#Observation>.
-        } limit 100
+        } limit 5
         """.replace('GRAPH',namedgraph)
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
@@ -98,7 +99,7 @@ class CubeMaker(object):
     
     def processObservation(self, namedgraph, observation):
         sparql = SPARQLWrapper(self.endpoint)
-        description = []
+        description = {}
         query = """
         select distinct ?p ?o from <GRAPH> where {
         <OBS> ?p ?o.
@@ -108,14 +109,15 @@ class CubeMaker(object):
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
         for result in results["results"]["bindings"]:
-            description.append((URIRef(result['p']['value']),result['o']['value']))
+            description.setdefault(URIRef(result['p']['value']), []).append(result['o']['value'])
 
         self.graph.add((observation,
                         RDF.type,
                         self.namespaces['qb']['Observation']))
-        for (p,o) in description:
-            print p,o
-    
+        if self.namespaces['tablink']['dimension'] in description:
+            rule = description[self.namespaces['tablink']['dimension']]
+            print rule, len(self.dimensions[rule])
+
 if __name__ == '__main__':
     # table = 'BRT_1899_10_T_marked'
     # Load the list of tables
@@ -137,7 +139,7 @@ if __name__ == '__main__':
     
     # Go for it, one by one
     for (cube, data) in cubes.iteritems():
-        if data['type'] != 'BRT':
+        if data['type'] != 'BRT' or data['year'] != '1920':
             continue
         print cube
         cube_maker = CubeMaker(cube_name, data)

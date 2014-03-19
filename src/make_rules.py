@@ -39,31 +39,51 @@ class RuleMaker(object):
         
         # Get a list of all the column headers
         headers = {}
+        max_depth = 0
         sparql = SPARQLWrapper(self.endpoint)
         query = """
-        select distinct ?header ?label ?parent from <GRAPH> where {
+        select distinct ?header ?label ?parent ?depth from <GRAPH> where {
         ?header a <http://example.org/ns#ColumnHeader>.
         ?header <http://www.w3.org/2004/02/skos/core#prefLabel> ?label.
         ?header <http://example.org/ns#subColHeaderOf> ?parent.
+        ?header <http://example.org/ns#depth> ?depth.
         }
         """.replace('GRAPH',namedgraph)
-        print query
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
         for result in results["results"]["bindings"]:
             resource = result['header']['value']
-            label = result['label']['value']
-            parent = result['parent']['value']
             headers[resource] = {}
-            headers[resource]['label'] = label
-            headers[resource]['parent'] = parent
-         
-        # Detect sex
-        self.detect_sex(headers)
+            headers[resource]['label'] = result['label']['value']
+            headers[resource]['parent'] = result['parent']['value']
+            headers[resource]['depth'] = int(result['depth']['value'])
+            if headers[resource]['depth'] > max_depth:
+                max_depth = headers[resource]['depth']
         
+        # Process all the leaf headers, one by one
+        for (header, data) in headers.iteritems():
+            # Skip non leaf
+            if data['depth'] != max_depth:
+                continue
+            self.process_header(headers, header, header)
+            
+    
+    def process_header(self, headers, leaf, header):
+        # Get the data
+        data = headers[header]
+        
+        # Detect several things in the label
+        self.detect_sex(leaf, data['label'])
+        self.detect_sums(leaf, data['label'])
+            
         # Detect total
-        self.detect_sums(headers)
+        #self.detect_sums(headers)
+        
+        # Recurse (added filter to go around vertical merge)
+        if data['depth'] != 1:
+            if headers[data['parent']]['label'] != data['label']:
+                self.process_header(headers, leaf, data['parent'])
     
     def saveTo(self, filename):
         """
@@ -74,30 +94,32 @@ class RuleMaker(object):
         file.writelines(turtle)
         file.close()
         
-    def detect_sex(self, headers):
+    def detect_sex(self, resource, label):
         """
-        Look for columns indicating the sex of individuals
+        Check for known labels for sex
         """
-        for (resource, content) in headers.iteritems():
-            label_clean = self._clean_string(content['label'])
-            
-            # Women
-            if label_clean == 'v' or label_clean == 'vrouwen' or label_clean == 'vrouwelijk geslacht':
-                self.create_rule_add_dimension(URIRef(resource),
-                                               self.namespaces['sdmx-dimension']['sex'],
-                                               self.namespaces['sdmx-code']['sex-V'])
+        label_clean = self._clean_string(label)
+        
+        # Women
+        if label_clean == 'v' or label_clean == 'vrouwen' or label_clean == 'vrouwelijk geslacht':
+            self.create_rule_add_dimension(URIRef(resource),
+                                           self.namespaces['sdmx-dimension']['sex'],
+                                           self.namespaces['sdmx-code']['sex-V'])
+            return True
 
-            # Man            
-            if label_clean == 'm' or label_clean == 'mannen' or label_clean == 'mannelijk geslacht':
-                self.create_rule_add_dimension(URIRef(resource),
-                                               self.namespaces['sdmx-dimension']['sex'],
-                                               self.namespaces['sdmx-code']['sex-M'])
+        # Man            
+        if label_clean == 'm' or label_clean == 'mannen' or label_clean == 'mannelijk geslacht':
+            self.create_rule_add_dimension(URIRef(resource),
+                                           self.namespaces['sdmx-dimension']['sex'],
+                                           self.namespaces['sdmx-code']['sex-M'])
+            return True
+        return False
     
-    def detect_sums(self, headers):
+    def detect_sums(self, resource, label):
         """
-        Look for columns used for totals
+        Check if the label speaks about "totaal"
         """
-        pass
+        return False
     
     def _clean_string(self, text):
         """
@@ -130,8 +152,15 @@ if __name__ == '__main__':
     #table = 'BRT_1899_10_T_marked'
     tables = [table.strip() for table in open('tables.txt')]
     for table in tables:
-        namedgraph = 'http://example.com/graph/TABLE'.replace('TABLE', table)
-        r = RuleMaker(table, 'http://127.0.0.1:1234/sparql/', namedgraph)
+        t = table.split('_')
+        type = t[0]
+        year = t[1]
+        if type != 'BRT' or year != '1920':
+            continue
+        print table
+        namedgraph = 'http://lod.cedar-project.nl/resource/v2/TABLE'.replace('TABLE', table)
+        r = RuleMaker(table, 'http://lod.cedar-project.nl:8080/sparql/cedar', namedgraph)
         r.go()
         r.saveTo('rules/' + table + '.ttl.bz2')
+        #exit(0)
         
