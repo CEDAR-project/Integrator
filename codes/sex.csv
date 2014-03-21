@@ -2,6 +2,8 @@
 "v",http://purl.org/linked-data/sdmx/2009/code#sex-V
 "vrouw",http://purl.org/linked-data/sdmx/2009/code#sex-V
 "vrouwelijk geslacht",http://purl.org/linked-data/sdmx/2009/code#sex-V
+"vrouwelijk",http://purl.org/linked-data/sdmx/2009/code#sex-V
 "m",http://purl.org/linked-data/sdmx/2009/code#sex-M
 "mannen",http://purl.org/linked-data/sdmx/2009/code#sex-M
 "mannelijk geslacht",http://purl.org/linked-data/sdmx/2009/code#sex-M
+"mannelijk",http://purl.org/linked-data/sdmx/2009/code#sex-M
