@@ -40,6 +40,18 @@ class CubeMaker(object):
         for namespace in self.namespaces:
             self.graph.namespace_manager.bind(namespace, self.namespaces[namespace])
         
+        # Initialise the bits about the data set
+        self.dataset_resource = URIRef(self.namespaces['cedardata'] + self.cube_name)
+        self.graph.add((self.dataset_resource, 
+                        RDF.type, 
+                        self.namespaces['qb']['DataSet']))
+        self.graph.add((self.dataset_resource,
+                        self.namespaces['cedar']['censusYear'],
+                        Literal(self.data['year'], datatype=XSD.integer)))
+        self.graph.add((self.dataset_resource,
+                        self.namespaces['cedar']['censusType'],
+                        Literal(self.data['census_type'])))
+        
     def go(self):
         """
         Start the job
@@ -120,50 +132,21 @@ class CubeMaker(object):
             rules.setdefault(target, []).append(rule)
             
         # Get all the observations in several pages
-        observations = []
-        offset = 0
-        page_size = 100
-        has_next_page = True
-        while has_next_page:
-            sparql = SPARQLWrapper(self.endpoint)
-            query = """
-            select distinct ?obs from <GRAPH> where {
-            ?obs a <http://purl.org/linked-data/cube#Observation>.
-            } 
-            """.replace('GRAPH',namedgraph)
-            query = query + " limit " + str(page_size) + " offset " + str(offset)
-            #query = query + " limit 5"
-            sparql.setQuery(query)
-            sparql.setReturnFormat(JSON)
-            results = sparql.query().convert()
-            nb_results = 0
-            for result in results["results"]["bindings"]:
-                nb_results = nb_results + 1
-                observations.append(URIRef(result['obs']['value']))
-            offset = offset + page_size
-            has_next_page = (nb_results == page_size)
-        print "Process %d observations" % len(observations)
-        
-        # Process observations
-        for observation in observations:  
-            self.processObservation(rules, source, namedgraph, observation)
-    
-    def processObservation(self, rules, table, namedgraph, observation):
-        """
-        Process a specific source observation and add to the graph the
-        harmonized version of it, using the rules from self.rules
-        """
-        # Load all the data about the observation
+        print "Query for observations ..."
+        observations = {}
         sparql = SPARQLWrapper(self.endpoint)
-        description = {}
         query = """
-        describe <OBS> from <GRAPH>  
-        """.replace('GRAPH',namedgraph).replace('OBS',observation)
+        select distinct ?obs ?p ?o from <GRAPH> where {
+        ?obs a <http://purl.org/linked-data/cube#Observation>.
+        ?obs ?p ?o.
+        } 
+        """.replace('GRAPH',namedgraph)
+        query = query + " limit 100"
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
-        description = []
         for result in results["results"]["bindings"]:
+            obs_r = URIRef(result['obs']['value'])
             v = None
             if result['o']['type'] == 'uri':
                 v = URIRef(result['o']['value'])
@@ -172,20 +155,33 @@ class CubeMaker(object):
                     v = Literal(result['o']['value'], datatype=result['o']['datatype'])
                 else:
                     v = Literal(result['o']['value'])
-            description.append((URIRef(result['p']['value']),v))
-
+            observations.setdefault(obs_r,[]).append((URIRef(result['p']['value']),v))
+        print "Will process %d observations" % len(observations)
+        
+        # Process observations
+        for (obs,desc) in observations.iteritems():  
+            self.processObservation(rules, source, obs, desc)
+    
+        # Update on the console
+        print "The number of harmonized observations is now %d" % self.nb_obs
+        
+    def processObservation(self, rules, table, observation, description):
+        """
+        Process a specific source observation and add to the graph the
+        harmonized version of it, using the rules from self.rules
+        """
         # Check that the observation is an int, skip it otherwise (a bit hacky now)
         #http://example.org/resource/BRT_1920_01_S1_marked/populationSize
         pop_size = URIRef("http://example.org/resource/"+table+"_marked/populationSize")
         has_pop_size = False
-        pop_size_val = 'Not found'
+        pop_size_val = Literal("")
         for (p, o) in description:
             if p == pop_size:
                 has_pop_size = True
                 pop_size_val = o
-        if not has_pop_size or type(pop_size_val.toPython()) is not int:
+        if not has_pop_size or type(pop_size_val.toPython()) is not long:
             return
-
+        
         # Get all the mapped dimensions
         harmonized_po = []
         for (p,o) in description:
@@ -195,7 +191,6 @@ class CubeMaker(object):
                 for r in rules_set:
                     if r['type'] == 'IgnoreObservation':
                         # We need to ignore the observation, it's a sum of something
-                        print 'fsdfsd'
                         return
                     elif r['type'] == 'AddDimensionValue':
                         # Got a p,o pair to bind to the thing
@@ -231,26 +226,24 @@ class CubeMaker(object):
                 # no worries, that can happen
                 pass
         
-        # Add the new observation to the graph
-        resource = URIRef(self.namespaces['cedardata'] + self.cube_name + "/" + str(self.nb_obs))
-        self.nb_obs = self.nb_obs + 1
-        self.graph.add((resource,
-                        RDF.type,
-                        self.namespaces['qb']['Observation']))
-        self.graph.add((resource,
-                        self.namespaces['cedar']['sourceObservation'],
-                        observation))
-        self.graph.add((resource,
-                        self.namespaces['cedar']['populationSize'],
-                        pop_size_val))
-        self.graph.add((resource,
-                        self.namespaces['cedar']['censusYear'],
-                        Literal(self.data['year'], datatype=XSD.integer)))
-        self.graph.add((resource,
-                        self.namespaces['cedar']['censusType'],
-                        Literal(self.data['census_type'])))
-        for (p,o) in harmonized_po:
-            self.graph.add((resource, p, o))
+        if len(harmonized_po) > 0:
+            # Add the new observation to the graph
+            resource = URIRef(self.namespaces['cedardata'] + self.cube_name + "/" + str(self.nb_obs))
+            self.nb_obs = self.nb_obs + 1
+            self.graph.add((resource,
+                            RDF.type,
+                            self.namespaces['qb']['Observation']))
+            self.graph.add((resource,
+                            self.namespaces['cedar']['sourceObservation'],
+                            observation))
+            self.graph.add((resource,
+                            self.namespaces['cedar']['populationSize'],
+                            pop_size_val))
+            self.graph.add((resource,
+                            self.namespaces['qb']['dataSet'],
+                            self.dataset_resource))
+            for (p,o) in harmonized_po:
+                self.graph.add((resource, p, o))
             
     def saveTo(self, filename):
         """
@@ -261,6 +254,12 @@ class CubeMaker(object):
         file.writelines(turtle)
         file.close()
 
+    def get_nb_obs(self):
+        """
+        Return the number of observations in the harmonized cube
+        """
+        return self.nb_obs
+    
 if __name__ == '__main__':
     # table = 'BRT_1899_10_T_marked'
     # Load the list of tables
@@ -284,11 +283,12 @@ if __name__ == '__main__':
     print "About to write {} cubes".format(len(cubes))
     
     # Go for it, one by one
-    for (cube_name, data) in cubes.iteritems():
+    for cube_name in sorted(cubes.keys()):
         #if data['census_type'] != 'BRT' or data['year'] != '1920':
         #    continue
-        print cube_name
-        cube_maker = CubeMaker(cube_name, data)
+        print "Processing " + cube_name
+        cube_maker = CubeMaker(cube_name, cubes[cube_name])
         cube_maker.go()
-        cube_maker.saveTo('cubes/' + cube_name + '.ttl.bz2')
+        if cube_maker.get_nb_obs() != 0:
+            cube_maker.saveTo('cubes/' + cube_name + '.ttl.bz2')
     
