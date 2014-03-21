@@ -28,3 +28,5 @@ def clean_codes(source, dest, prefix):
 if __name__ == '__main__':
     clean_codes('raw_beroep_data.csv', 'codes/occupation.csv', 'hisco')
     clean_codes('raw_religion_data.csv', 'codes/belief.csv', 'belief')
+    clean_codes('raw_gemeente_data.csv', 'codes/city.csv', 'ac')
+    
