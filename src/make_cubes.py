@@ -141,7 +141,7 @@ class CubeMaker(object):
         ?obs ?p ?o.
         } 
         """.replace('GRAPH',namedgraph)
-        query = query + " limit 100"
+        #query = query + " limit 100"
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
@@ -202,6 +202,10 @@ class CubeMaker(object):
                         # Unknown rule ?!
                         pass
             elif p in rules:
+                # if there is a total, return
+                if type(o.toPython) == unicode:
+                    if 'totaal' in self._clean_string(o.toPython()):
+                        return
                 # These are rules that applies to row properties
                 rules_set = rules[p]
                 for r in rules_set:
@@ -304,6 +308,9 @@ if __name__ == '__main__':
         # Kind of debug code to focus on one cube
         #if cubes[cube_name]['census_type'] != 'VT' or cubes[cube_name]['year'] != '1859':
         #    continue
+        if os.path.isfile('cubes/' + cube_name + '.ttl.bz2'):
+            print "Skip " + cube_name
+            continue
         print "Processing " + cube_name
         cube_maker = CubeMaker(cube_name, cubes[cube_name])
         cube_maker.go()
