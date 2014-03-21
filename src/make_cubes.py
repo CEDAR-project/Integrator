@@ -208,13 +208,18 @@ class CubeMaker(object):
                     if r['type'] == 'SetDimension':
                         raw_value = o
                         dim = r['dimension']
-                        # try to map the value to a code
-                        c = codes.get_code(dim, o.toPython())
-                        if c != None:
-                            harmonized_po.append((dim, c))
-                        elif codes.no_codes_for(dim):
+                        if codes.no_codes_for(dim):
                             # If there is no code just put the raw value
                             harmonized_po.append((dim, raw_value))
+                        elif type(raw_value.toPython()) == unicode:
+                            # try to map the value to a code
+                            cleaned_raw_value = self._clean_string(raw_value.toPython())
+                            c = codes.get_code(dim, cleaned_raw_value)
+                            if c != None:
+                                harmonized_po.append((dim, c))
+                        else:
+                            # Just ignore this dimension
+                            pass
                     elif r['type'] == 'IgnoreObservation' or r['type'] == 'AddDimensionValue':
                         # should not happen, maybe raise an exception
                         pass
@@ -259,6 +264,18 @@ class CubeMaker(object):
         Return the number of observations in the harmonized cube
         """
         return self.nb_obs
+ 
+    def _clean_string(self, text):
+        """
+        Utility function to clean a string
+        """
+        # Remove some extra things
+        text_clean = text.replace('.', '').replace('_', ' ').lower()
+        # Shrink spaces
+        text_clean = re.sub(r'\s+', ' ', text_clean)
+        # Remove lead and trailing whitespaces
+        text_clean = text_clean.strip()
+        return text_clean
     
 if __name__ == '__main__':
     # table = 'BRT_1899_10_T_marked'
@@ -284,7 +301,8 @@ if __name__ == '__main__':
     
     # Go for it, one by one
     for cube_name in sorted(cubes.keys()):
-        #if data['census_type'] != 'BRT' or data['year'] != '1920':
+        # Kind of debug code to focus on one cube
+        #if cubes[cube_name]['census_type'] != 'VT' or cubes[cube_name]['year'] != '1830':
         #    continue
         print "Processing " + cube_name
         cube_maker = CubeMaker(cube_name, cubes[cube_name])
