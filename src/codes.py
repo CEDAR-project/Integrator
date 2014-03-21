@@ -29,6 +29,10 @@ class Codes(object):
             self.namespaces['cedar']['occupationPosition'] : {
                 'fileName' : 'codes/occupation_position.csv',
                 'map' : dict()
+            },
+            self.namespaces['cedar']['occupation'] : {
+                'fileName' : 'codes/occupation.csv',
+                'map' : dict()
             }
         }
         
