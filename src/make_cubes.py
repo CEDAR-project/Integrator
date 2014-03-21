@@ -28,7 +28,7 @@ class CubeMaker(object):
         # Keep parameters
         self.cube_name = cube_name
         self.data = data
-        self.rules = None
+        self.rules = {}
         
         # The graph that will be used to store the rules
         self.graph = ConjunctiveGraph()
@@ -41,56 +41,54 @@ class CubeMaker(object):
         """
         # Iterate over all the sources
         for source in self.data['sources']:
-            self.processSource(source)
+            # See if we have harmonization rules for this file
+            rulesFile = 'rules/' + table + '.ttl.bz2'
+            if not os.path.isfile(rulesFile):
+                print 'No harmonization rules for {0} !'.format(source)
+                continue
+            self.processSource(source, rulesFile)
 
-    def processSource(self, source):
+    def processSource(self, source, rulesFile):
         """
         Process a single source of data
         """
         namedgraph = 'http://lod.cedar-project.nl/resource/v2/TABLE'.replace('TABLE', source)
-        rulesFile = 'rules/' + source + '.ttl.bz2'
         
         # Load the rules file
-        self.rules = rdflib.Graph()
-        self.rules.load(bz2.BZ2File(rulesFile), format="turtle")
-        if len(self.rules) == 0:
+        g = rdflib.Graph()
+        g.load(bz2.BZ2File(rulesFile), format="turtle")
+        if len(g) == 0:
             return
         print "Loaded %d triple rules from %s" % (len(self.rules), rulesFile)
         
-        # Load the tree of column headers
-        self.dimensions = {}
-        sparql = SPARQLWrapper(self.endpoint)
-        query = """
-        select distinct ?header ?parent from <GRAPH> where {
-        ?header a <http://example.org/ns#ColumnHeader>.
-        ?header <http://example.org/ns#subColHeaderOf> ?parent.
-        }
-        """.replace('GRAPH',namedgraph)
-        sparql.setQuery(query)
-        sparql.setReturnFormat(JSON)
-        results = sparql.query().convert()
-        for result in results["results"]["bindings"]:
-            resource = result['header']['value']
-            parent = result['parent']['value']
-            self.dimensions[resource] = {}
-            self.dimensions[resource].setdefault('parent', []).append(parent)
+        # Parse the RDF to associate the rules to the dimensions
+        #qres = g.query(
         
-        # TODO Associate the rules to the tree of headers under 'rules' array
-        
-        return     
-        # Get all the observations
-        sparql = SPARQLWrapper(self.endpoint)
+        return
+    
+        # Get all the observations in several pages
         observations = []
-        query = """
-        select distinct ?obs from <GRAPH> where {
-        ?obs a <http://purl.org/linked-data/cube#Observation>.
-        } limit 5
-        """.replace('GRAPH',namedgraph)
-        sparql.setQuery(query)
-        sparql.setReturnFormat(JSON)
-        results = sparql.query().convert()
-        for result in results["results"]["bindings"]:
-            observations.append(URIRef(result['obs']['value']))
+        offset = 0
+        page_size = 100
+        has_next_page = True
+        while has_next_page:
+            sparql = SPARQLWrapper(self.endpoint)
+            query = """
+            select distinct ?obs from <GRAPH> where {
+            ?obs a <http://purl.org/linked-data/cube#Observation>.
+            } 
+            """.replace('GRAPH',namedgraph)
+            #query = query + " limit " + page_size + " offset " + offset
+            query = query + " limit 5"
+            sparql.setQuery(query)
+            sparql.setReturnFormat(JSON)
+            results = sparql.query().convert()
+            nb_results = 0
+            for result in results["results"]["bindings"]:
+                nb_results = nb_results + 1
+                observations.append(URIRef(result['obs']['value']))
+            offset = offset + page_size
+            has_next_page = (nb_results == page_size)
         print "Process %d observations" % len(observations)
         
         # Process observations

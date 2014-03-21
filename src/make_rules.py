@@ -32,6 +32,7 @@ class RuleMaker(object):
         self.tablename = tablename
         self.endpoint = endpoint
         self.namedgraph = namedgraph
+        self.nbrules = 0
         
         # The graph that will be used to store the rules
         self.graph = ConjunctiveGraph()
@@ -108,7 +109,7 @@ class RuleMaker(object):
         #####
         # Done
         #####
-        print "Done"
+        print "Done with %d rules" % self.nbrules
         
     def process_row_header(self, header, label):
         """
@@ -279,6 +280,9 @@ class RuleMaker(object):
         text_clean = text_clean.strip()
         return text_clean
     
+    def get_nb_rules(self):
+        return self.nbrules
+    
     def create_rule_add_dimension_value(self, target, source, dimensionvalue):
         """
         Create a new harmonization rule that assign a dimension and value
@@ -301,6 +305,7 @@ class RuleMaker(object):
         self.graph.add((resource,
                         self.namespaces['harmonizer']['value'],
                         value))
+        self.nbrules = self.nbrules + 1
     
     def create_rule_set_dimension(self, target, dimension):
         """
@@ -318,6 +323,7 @@ class RuleMaker(object):
         self.graph.add((resource,
                         self.namespaces['harmonizer']['dimension'],
                         dimension))
+        self.nbrules = self.nbrules + 1
         
     def create_rule_ignore_observation(self, target, source):
         """
@@ -334,6 +340,7 @@ class RuleMaker(object):
         self.graph.add((resource,
                         self.namespaces['harmonizer']['generatedFrom'],
                         source))
+        #self.nbrules = self.nbrules + 1 we don't really want only these
         
 if __name__ == '__main__':
     # Parameters
@@ -361,8 +368,10 @@ if __name__ == '__main__':
         try:
             r = RuleMaker(codes, table, endpoint, ngtemplate.replace('TABLE', table))
             r.go()
-            r.saveTo(filename)
+            if r.get_nb_rules() != 0:
+                r.saveTo(filename)
         except:
+            print "Error processing the table !"
             pass
         #exit(0)
         
