@@ -74,6 +74,12 @@ class Codes(object):
                 return self.dimensions[dimension]['map'][literal]
         return None
 
+    def no_codes_for(self, dimension):
+        """
+        Return true if there is no code for a dimension
+        """
+        return dimension not in self.dimensions
+    
     def detect_code(self, literal):
         """
         Return the first match (dim, value) for the literal
