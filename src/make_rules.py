@@ -5,6 +5,7 @@ import re
 import uuid
 import bz2
 import operator
+import os.path
 
 from codes import Codes
 
@@ -338,8 +339,15 @@ if __name__ == '__main__':
         # Skip some tables for testing
         #if type != 'BRT' or year != '1920':
         #    continue
-        r = RuleMaker(codes, table, endpoint, ngtemplate.replace('TABLE', table))
-        r.go()
-        r.saveTo('rules/' + table + '.ttl.bz2')
+        filename = 'rules/' + table + '.ttl.bz2'
+        if os.path.isfile(filename):
+            print 'Skip {0} !'.format(filename)
+            continue
+        try:
+            r = RuleMaker(codes, table, endpoint, ngtemplate.replace('TABLE', table))
+            r.go()
+            r.saveTo(filename)
+        except:
+            pass
         #exit(0)
         
