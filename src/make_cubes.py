@@ -302,7 +302,7 @@ if __name__ == '__main__':
     # Go for it, one by one
     for cube_name in sorted(cubes.keys()):
         # Kind of debug code to focus on one cube
-        #if cubes[cube_name]['census_type'] != 'VT' or cubes[cube_name]['year'] != '1830':
+        #if cubes[cube_name]['census_type'] != 'VT' or cubes[cube_name]['year'] != '1859':
         #    continue
         print "Processing " + cube_name
         cube_maker = CubeMaker(cube_name, cubes[cube_name])
