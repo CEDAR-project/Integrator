@@ -136,6 +136,21 @@ class RuleMaker(object):
         if len(sample) == 0:
             return
         
+        # Tweak: try to see if we have a sample that correspond to years
+        # see e.g. table VT_1859_02_H1
+        years = True
+        try:
+            for entry in sample:
+                y = int(entry)
+                if y > 1971 or y < 1600:
+                    years = False
+        except ValueError:
+            years = False
+        # if the column contains years it should be a birth year
+        if years:
+            self.create_rule_set_dimension(header, self.namespaces['cedar']['birthYear'])
+            return
+        
         # Check if we can find the dimension associated to this header
         counts = {}
         for entry in sample:
