@@ -1,6 +1,6 @@
 #!/usr/bin/python2
 from SPARQLWrapper import SPARQLWrapper, JSON
-from rdflib import ConjunctiveGraph, Namespace, Literal, RDF, RDFS, BNode, URIRef, XSD
+from rdflib import ConjunctiveGraph, Namespace, Literal, RDF, RDFS, BNode, URIRef, XSD, Variable
 from  rdflib.plugins.sparql import prepareQuery
 import re
 import uuid
@@ -125,7 +125,7 @@ class CubeMaker(object):
         """, initNs = { "harmonizer": self.namespaces['harmonizer'] })
         qres = g.query(q)
         for row in qres:
-            (target) = row
+            target = row[Variable('target')]
             rule = {
                 'type' : 'IgnoreObservation',
             }
