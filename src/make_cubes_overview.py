@@ -6,10 +6,10 @@ import re
 import uuid
 import rdflib
 import bz2
+import os.path
 
 NG_TEMPLATE = 'http://lod.cedar-project.nl/resource/v2/TABLE'
 END_POINT = 'http://lod.cedar-project.nl:8080/sparql/cedar'
-
 
 class TableOverview(object):
     namespaces = {
@@ -32,6 +32,9 @@ class TableOverview(object):
         self.outputFile = file
         
     def go(self):
+        if not os.path.isfile(self.rulesFile):
+            return
+        
         # Load all the relevant data
         col_headers = self.load_column_headers()
         row_headers = self.load_row_headers()
@@ -51,36 +54,37 @@ class TableOverview(object):
         col_headers_entries = {}
         for leaf in sorted(col_leaves):
             label = self.get_leaf_label(col_headers, leaf, "")
-            for rule in rules[leaf]:
-                if rule['type'] == 'IgnoreObservation':
-                    description = 'Ignore observation'
-                    col_headers_entries.setdefault(label, []).append(description)
-                elif rule['type'] == 'AddDimensionValue':
-                    (dim, val) = rule['dimval']
-                    val_txt = val.split('#')[1]
-                    dim_txt = dim.split('#')[1]
-                    description = 'Assign the code \"' + val_txt + '\" '
-                    description += 'to the dimension \"' + dim_txt + '\"'
-                    col_headers_entries.setdefault(label, []).append(description)
+            if leaf in rules:
+                for rule in rules[leaf]:
+                    if rule['type'] == 'IgnoreObservation':
+                        description = 'Ignore observation'
+                        col_headers_entries.setdefault(label, []).append(description)
+                    elif rule['type'] == 'AddDimensionValue':
+                        (dim, val) = rule['dimval']
+                        val_txt = val.split('#')[1]
+                        dim_txt = dim.split('#')[1]
+                        description = 'Assign the code \"' + val_txt + '\" '
+                        description += 'to the dimension \"' + dim_txt + '\"'
+                        col_headers_entries.setdefault(label, []).append(description)
                     
                     
                     
         # Process the column headers
         row_headers_entries = {}
         for row in sorted(row_headers):
-            for rule in rules[row]:
-                print rule
-                label = row_headers[row]['label']
-                if rule['type'] == 'SetDimension':
-                    code_txt = rule['dimension'].split('#')[1]
-                    description = 'Assign a value from the \"' + code_txt + '\" codes' 
-                    row_headers_entries.setdefault(label, []).append(description)
+            if row in rules:
+                for rule in rules[row]:
+                    label = row_headers[row]['label']
+                    if rule['type'] == 'SetDimension':
+                        code_txt = rule['dimension'].split('#')[1]
+                        description = 'Assign a value from the \"' + code_txt + '\" codes' 
+                        row_headers_entries.setdefault(label, []).append(description)
         
         
         # Print out the output
         self.outputFile.write("# Rules for the table " + self.table + "\n")
         
-        self.outputFile.write("## Row Properties\n")
+        self.outputFile.write("## Row properties\n")
         self.outputFile.write("| Title of the property | Rules |\n")
         self.outputFile.write("| --------------------- |:-----:|\n")
         for entry in row_headers_entries.iteritems():
@@ -88,7 +92,7 @@ class TableOverview(object):
             txt = " *and* ".join(txts)
             self.outputFile.write("| %s | %s |\n" % (label, txt))
             
-        self.outputFile.write("## Column Properties\n")
+        self.outputFile.write("## Column properties\n")
         self.outputFile.write("| Title of the column | Rules |\n")
         self.outputFile.write("| --------------------- |:-----:|\n")
         for entry in col_headers_entries.iteritems():
@@ -245,9 +249,12 @@ class TableOverview(object):
         return rules
     
 if __name__ == '__main__':
-    table = 'BRT_1899_10_T'
+    #table = 'BRT_1899_10_T'
+    tables = [table.strip() for table in open('tables.txt')]
+    
     file  = open('rules/overview.md', "wb")
-    table_overview = TableOverview(table, file)
-    table_overview.go()
+    for table in tables:
+        table_overview = TableOverview(table, file)
+        table_overview.go()
     file.close()
 
