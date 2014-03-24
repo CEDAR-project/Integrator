@@ -80,7 +80,7 @@ class TableOverview(object):
         # Print out the output
         self.outputFile.write("# Rules for the table " + self.table + "\n")
         
-        self.outputFile.write("## Row Properties")
+        self.outputFile.write("## Row Properties\n")
         self.outputFile.write("| Title of the property | Rules |\n")
         self.outputFile.write("| --------------------- |:-----:|\n")
         for entry in row_headers_entries.iteritems():
@@ -88,7 +88,7 @@ class TableOverview(object):
             txt = " *and* ".join(txts)
             self.outputFile.write("| %s | %s |\n" % (label, txt))
             
-        self.outputFile.write("## Column Properties")
+        self.outputFile.write("## Column Properties\n")
         self.outputFile.write("| Title of the column | Rules |\n")
         self.outputFile.write("| --------------------- |:-----:|\n")
         for entry in col_headers_entries.iteritems():
