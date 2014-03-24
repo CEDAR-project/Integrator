@@ -26,10 +26,9 @@ class TableOverview(object):
       'cedardata':Namespace('http://cedar.example.org/resource/'),
     }
     
-    def __init__(self, table, file):
+    def __init__(self, table):
         self.table = table
         self.rulesFile = 'rules/' + table + '.ttl.bz2'
-        self.outputFile = file
         
     def go(self):
         if not os.path.isfile(self.rulesFile):
@@ -82,24 +81,28 @@ class TableOverview(object):
         
         
         # Print out the output
-        self.outputFile.write("# Rules for the table " + self.table + "\n")
+        outputFileName = 'rules/' + self.table + '.md'
+        outputFile = open(outputFileName, "wb")
+        table_link = "https://github.com/cgueret/DataDump/blob/master/xls-marked/" + self.table + "_marked.xls?raw=true"
+        outputFile.write("# Rules for the table [" + self.table + "](" + table_link + ")\n")
         
-        self.outputFile.write("## Row properties\n")
-        self.outputFile.write("| Title of the property | Rules |\n")
-        self.outputFile.write("| --------------------- |:-----:|\n")
+        outputFile.write("## Row properties\n")
+        outputFile.write("| Title of the property | Rules |\n")
+        outputFile.write("| --------------------- |:-----:|\n")
         for entry in row_headers_entries.iteritems():
-            (label,txts) = entry
+            (label, txts) = entry
             txt = " *and* ".join(txts)
-            self.outputFile.write("| %s | %s |\n" % (label, txt))
-            
-        self.outputFile.write("## Column properties\n")
-        self.outputFile.write("| Title of the column | Rules |\n")
-        self.outputFile.write("| --------------------- |:-----:|\n")
+            outputFile.write("| %s | %s |\n" % (label, txt))
+                
+        outputFile.write("## Column properties\n")
+        outputFile.write("| Title of the column | Rules |\n")
+        outputFile.write("| --------------------- |:-----:|\n")
         for entry in col_headers_entries.iteritems():
-            (label,txts) = entry
+            (label, txts) = entry
             txt = " *and* ".join(txts)
-            self.outputFile.write("| %s | %s |\n" % (label, txt))
-                    
+            outputFile.write("| %s | %s |\n" % (label, txt))
+        outputFile.close()
+                  
     def _clean_string(self, text):
         """
         Utility function to clean a string
@@ -139,7 +142,7 @@ class TableOverview(object):
             return label
         
     def load_column_headers(self):
-        namedgraph = NG_TEMPLATE.replace('TABLE',self.table)
+        namedgraph = NG_TEMPLATE.replace('TABLE', self.table)
         
         # Get a list of all the column headers
         headers = {}
@@ -164,7 +167,7 @@ class TableOverview(object):
         return headers
     
     def load_row_headers(self):
-        namedgraph = NG_TEMPLATE.replace('TABLE',self.table)
+        namedgraph = NG_TEMPLATE.replace('TABLE', self.table)
         
         headers = {}
         sparql = SPARQLWrapper(END_POINT)
@@ -173,7 +176,7 @@ class TableOverview(object):
         ?header a <http://example.org/ns#RowProperty>.
         ?header <http://www.w3.org/2004/02/skos/core#prefLabel> ?label.
         }
-        """.replace('GRAPH',namedgraph)
+        """.replace('GRAPH', namedgraph)
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
@@ -249,12 +252,10 @@ class TableOverview(object):
         return rules
     
 if __name__ == '__main__':
-    #table = 'BRT_1899_10_T'
+    # table = 'BRT_1899_10_T'
     tables = [table.strip() for table in open('tables.txt')]
     
-    file  = open('rules/overview.md', "wb")
     for table in tables:
-        table_overview = TableOverview(table, file)
+        table_overview = TableOverview(table)
         table_overview.go()
-    file.close()
 
