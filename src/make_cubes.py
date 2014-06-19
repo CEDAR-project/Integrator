@@ -1,30 +1,15 @@
 #!/usr/bin/python2
 from SPARQLWrapper import SPARQLWrapper, JSON
-from rdflib import ConjunctiveGraph, Namespace, Literal, RDF, RDFS, BNode, URIRef, XSD, Variable
-from  rdflib.plugins.sparql import prepareQuery
+from rdflib import ConjunctiveGraph, Namespace, Literal, RDF, URIRef, XSD, Variable
+from rdflib.plugins.sparql import prepareQuery
 import re
-import uuid
 import rdflib
 import bz2
 import os.path
 
-from codes import Codes
+from common.codes import Codes
 
 class CubeMaker(object):
-    endpoint = 'http://lod.cedar-project.nl:8080/sparql/cedar'
-    namespaces = {
-      'dcterms':Namespace('http://purl.org/dc/terms/'), 
-      'skos':Namespace('http://www.w3.org/2004/02/skos/core#'), 
-      'tablink':Namespace('http://example.org/ns#'), 
-      'harmonizer':Namespace('http://harmonizer.example.org/ns#'),
-      'rules':Namespace('http://rules.example.org/resource/'),
-      'qb':Namespace('http://purl.org/linked-data/cube#'), 
-      'owl':Namespace('http://www.w3.org/2002/07/owl#'),
-      'sdmx-dimension':Namespace('http://purl.org/linked-data/sdmx/2009/dimension#'),
-      'sdmx-code':Namespace('http://purl.org/linked-data/sdmx/2009/code#'),
-      'cedar':Namespace('http://cedar.example.org/ns#'),
-      'cedardata':Namespace('http://cedar.example.org/resource/'),
-    }
     
     def __init__(self, cube_name, data):
         """

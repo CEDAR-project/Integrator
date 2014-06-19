@@ -1,9 +1,8 @@
 #!/usr/bin/python2
 from SPARQLWrapper import SPARQLWrapper, JSON
-from rdflib import ConjunctiveGraph, Namespace, Literal, RDF, RDFS, BNode, URIRef, XSD, Variable
-from  rdflib.plugins.sparql import prepareQuery
+from rdflib import Namespace, URIRef, Variable
+from rdflib.plugins.sparql import prepareQuery
 import re
-import uuid
 import rdflib
 import bz2
 import os.path
@@ -11,21 +10,7 @@ import os.path
 NG_TEMPLATE = 'http://lod.cedar-project.nl/resource/v2/TABLE'
 END_POINT = 'http://lod.cedar-project.nl:8080/sparql/cedar'
 
-class TableOverview(object):
-    namespaces = {
-      'dcterms':Namespace('http://purl.org/dc/terms/'),
-      'skos':Namespace('http://www.w3.org/2004/02/skos/core#'),
-      'tablink':Namespace('http://example.org/ns#'),
-      'harmonizer':Namespace('http://harmonizer.example.org/ns#'),
-      'rules':Namespace('http://rules.example.org/resource/'),
-      'qb':Namespace('http://purl.org/linked-data/cube#'),
-      'owl':Namespace('http://www.w3.org/2002/07/owl#'),
-      'sdmx-dimension':Namespace('http://purl.org/linked-data/sdmx/2009/dimension#'),
-      'sdmx-code':Namespace('http://purl.org/linked-data/sdmx/2009/code#'),
-      'cedar':Namespace('http://cedar.example.org/ns#'),
-      'cedardata':Namespace('http://cedar.example.org/resource/'),
-    }
-    
+class TableOverview(object):    
     def __init__(self, table):
         self.table = table
         self.rulesFile = 'rules/' + table + '.ttl.bz2'

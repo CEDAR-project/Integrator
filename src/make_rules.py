@@ -7,22 +7,9 @@ import bz2
 import operator
 import os.path
 
-from codes import Codes
+from common.codes import Codes
 
 class RuleMaker(object):
-    namespaces = {
-      'dcterms':Namespace('http://purl.org/dc/terms/'), 
-      'skos':Namespace('http://www.w3.org/2004/02/skos/core#'), 
-      'tablink':Namespace('http://example.org/ns#'), 
-      'harmonizer':Namespace('http://harmonizer.example.org/ns#'),
-      'rules':Namespace('http://rules.example.org/resource/'),
-      'qb':Namespace('http://purl.org/linked-data/cube#'), 
-      'owl':Namespace('http://www.w3.org/2002/07/owl#'),
-      'sdmx-dimension':Namespace('http://purl.org/linked-data/sdmx/2009/dimension#'),
-      'sdmx-code':Namespace('http://purl.org/linked-data/sdmx/2009/code#'),
-      'cedar':Namespace('http://cedar.example.org/ns#')
-    }
-    
     def __init__(self, codes, tablename, endpoint, namedgraph):
         """
         Constructor
@@ -229,10 +216,14 @@ class RuleMaker(object):
         # Clean the label
         label_clean = self._clean_string(data['label'])
         
-        # Check if we can find something
+        # Check if we can find something that is codified
         result = codes.detect_code(label_clean)
         if result != None:
             dimensions.add((header, result))
+        
+        # Look for a birth year pattern
+        # TODO: two sets of numbers with the same difference and the second
+        # set higher than 1700
         
         # Recurse
         parent = data['parent']
