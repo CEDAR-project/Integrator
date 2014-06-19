@@ -8,3 +8,5 @@
 
 This the data integration pipeline for the project [CEDA_R](http://www.cedar-project.nl/)
 
+![Pipeline](https://raw.githubusercontent.com/CEDAR-project/Integrator/master/pipeline.png "Overview of the pipeline")
+
