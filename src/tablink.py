@@ -6,14 +6,14 @@ Code derived from TabLinker
 """
 from xlutils.margins import number_of_good_cols, number_of_good_rows
 from xlrd import open_workbook, XL_CELL_EMPTY, XL_CELL_BLANK, cellname
-from rdflib import ConjunctiveGraph, Literal, RDF, BNode, URIRef, XSD
-from urlparse import urlparse
+from rdflib import ConjunctiveGraph, Literal, RDF, BNode, URIRef, XSD, RDFS
 import re
 import urllib
 import logging
 import datetime
 import bz2
 import os.path
+import pprint
 
 import sys
 from common.configuration import Configuration
@@ -21,6 +21,7 @@ reload(sys)
 import traceback
 sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
+pp = pprint.PrettyPrinter(indent=2)
 
 class TabLinker(object):
     def __init__(self, conf, excelFileName, markingFileName, dataFileName, annotationsFileName=None):
@@ -86,13 +87,8 @@ class TabLinker(object):
             logging.info(sys.exc_info())
             traceback.print_exc(file=sys.stdout)
             
-
         self.log.info('Done !')
-    # eg:lifeExpectancy  a rdf:Property, qb:MeasureProperty;
-    # rdfs:label "life expectancy"@en;
-    # rdfs:subPropertyOf sdmx-measure:obsValue;
-    # rdfs:range xsd:decimal . 
-    
+        
     def parseSheet(self, n):
         """
         Parses the currently selected sheet in the workbook, takes no arguments. Iterates over all cells in the Excel sheet and produces relevant RDF Triples. 
@@ -106,12 +102,10 @@ class TabLinker(object):
         datasetURI = self.conf.getURI('cedar', "{0}_S{1}".format(self.basename, n))
         
         columnDimensions = {}
-        propertyDimensions = {}
         rowDimensions = {}
-        rowHierarchy = {}
+        rowProperties = {}
         
         for i in range(0, rowns):
-            rowHierarchy[i] = {}
             for j in range(0, colns):
                 # Skip cells for which no marking information is available
                 if cellname(i, j) not in self.marking[n]:
@@ -126,8 +120,6 @@ class TabLinker(object):
                     'cell' : sheet.cell(i, j),
                     # The sheet
                     'sheet' : sheet,
-                    # Column dimensions
-                    'columnDimensions' : columnDimensions,
                     # The name of the cell
                     'name' : cellname(i, j),
                     # The type of the cell
@@ -145,26 +137,22 @@ class TabLinker(object):
                 # self.log.debug("({},{}) {}/{}: \"{}\"". format(i, j, cellType, cellName, cellValue))
                                             
                 # Parse annotation if any and if their processing is enabled
-                if (i, j) in sheet.cell_note_map and self.annotationsFileName != None:
-                    self.parseAnnotation(cell)
+                #if (i, j) in sheet.cell_note_map and self.annotationsFileName != None:
+                #    self.parseAnnotation(cell)
 
                 # Parse cell content
                 if cell['type'] == 'TL Data':
-                    self.handleData(cell)
+                    self.handleData(cell, columnDimensions, rowDimensions)
+                elif cell['type'] == 'TL RowHeader' :
+                    self.handleRowHeader(cell, rowDimensions, rowProperties)
                 elif cell['type'] == 'TL HRowHeader' :
-                    self.handleHRowHeader(cell, rowHierarchy)
+                    self.handleHRowHeader(cell, rowDimensions, rowProperties)
                 elif cell['type'] == 'TL ColHeader' :
-                    self.handleColHeader(cell)
-                # elif self.cellType == 'RowProperty' :
-                #    self.parseRowProperty(i, j)
-                # elif self.cellType == 'Title' :
-                #    self.parseTitle(i, j)
-                # elif self.cellType == 'RowHeader' :
-                #    self.parseRowHeader(i, j)
-                # elif self.cellType == 'HRowHeader' :
-                #    self.parseHierarchicalRowHeader(i, j)
-                # elif self.cellType == 'RowLabel' :
-                #    self.parseRowLabel(i, j)
+                    self.handleColHeader(cell, columnDimensions)
+                elif cell['type'] == 'TL RowProperty' :
+                    self.handleRowProperty(cell, rowProperties)
+                elif cell['type'] == 'TL Title' :
+                    self.handleTitle(cell)
         
         # Add additional information about the hierarchy of column headers
         # for value in columnDimensions.values():
@@ -174,8 +162,16 @@ class TabLinker(object):
         #        self.graph.add((uri_sub, self.namespaces['tablink']['subColHeaderOf'], uri_top))
         
         self.log.info("Done parsing...")
-   
-    def handleData(self, cell) :
+        
+        # Write the ontology for tablinker
+        self.dataGraph.add((self.conf.getURI('tablink', 'value'), RDF.type, self.conf.getURI('qb', 'MeasureProperty')))
+        self.dataGraph.add((self.conf.getURI('tablink', 'cell'), RDF.type, RDF.Property))
+        self.dataGraph.add((self.conf.getURI('tablink', 'parentCell'), RDF.type, RDF.Property))
+        self.dataGraph.add((self.conf.getURI('tablink', 'dimension'), RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+        self.dataGraph.add((self.conf.getURI('tablink', 'ColumnHeader'), RDFS.subClassOf, self.conf.getURI('qb', 'DimensionProperty')))
+        
+        
+    def handleData(self, cell, columnDimensions, rowDimensions) :
         """
         Create relevant triples for the cell marked as Data
         """
@@ -191,56 +187,77 @@ class TabLinker(object):
         # Add it's value
         self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'], datatype=XSD.decimal)))
         
-        # Use the row dimensions dictionary to find the properties that link
-        # data values to row headers
-        # try :
-        #    for (prop, value) in self.row_dimensions[i].iteritems() :
-        #        self.graph.add((observation, prop, value))
-        # except KeyError :
-        #    self.log.debug("({}.{}) No row dimension for cell".format(i, j))
+        # Bind all the row dimensions
+        try :
+            for (prop, value) in rowDimensions[cell['i']].iteritems() :
+                self.dataGraph.add((cell['URI'], prop, Literal(value)))
+        except KeyError :
+            self.log.debug("({}.{}) No row dimension for cell".format(cell['i'], cell['j']))
         
         # Bind all the column dimensions
         try:
-            for dim in cell['columnDimensions'][cell['j']]:
+            for dim in columnDimensions[cell['j']]:
                 self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
         except KeyError:
             self.log.debug("({},{}) No column dimension for the cell".format(cell['i'], cell['j']))
         
-    def handleHRowHeader(self, cell, rowHierarchy) :
+    def handleRowHeader(self, cell, rowDimensions, rowProperties) :
+        """
+        Create relevant triples for the cell marked as RowHeader
+        """
+        if cell['isEmpty']:
+            return
+
+        # Get the row        
+        i = cell['i']
+        # Get the property for the column
+        j = cell['j']
+        prop = rowProperties[j]
+
+        rowDimensions.setdefault(i, {})
+        rowDimensions[i][prop] = cell['value']
+ 
+    
+    def handleHRowHeader(self, cell, rowDimensions, rowProperties) :
         """
         Build up lists for hierarchical row headers. 
         Cells marked as hierarchical row header are often empty meaning 
         that their intended value is stored somewhere else in the Excel sheet.
         """
+        # Get the row        
         i = cell['i']
+        # Get the property for the column
         j = cell['j']
+        prop = rowProperties[j]
         
         if (cell['isEmpty'] or cell['value'].lower() == 'id.') :
             # If the cell is empty, and a HierarchicalRowHeader, add the value of the row header above it.
-            # If the cell above is not in the rowhierarchy, don't do anything.
+            # If the cell above is not in the rowValues, don't do anything.
             # If the cell is exactly 'id.', add the value of the row header above it. 
             try :
-                rowHierarchy[i][j] = rowHierarchy[i - 1][j]
-                # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowHierarchy[i]))
+                rowDimensions.setdefault(i, {})
+                rowDimensions[i][prop] = rowDimensions[i - 1][prop]
+                # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
             except :
                 pass
                 # REMOVED because of double slashes in uris
-                # self.rowhierarchy[i][j] = self.source_cell.value
-                # self.log.debug("({},{}) Top row, added nothing\nRow hierarchy: {}".format(i, j, rowHierarchy[i]))
-        elif cell['value'].lower().startswith('id.') or cell['value'].lower().startswith('id '):
-            # If the cell starts with 'id.', add the value of the row  above it, and append the rest of the cell's value.
+                # self.rowValues[i][j] = self.source_cell.value
+                # self.log.debug("({},{}) Top row, added nothing\nRow hierarchy: {}".format(i, j, rowValues[i]))
+        elif cell['value'].lower().startswith('id') and len(cell['value'].lower()) == 3:
+            # If the cell starts with 'id.' or 'id ', add the value of the row  above it, and append the rest of the cell's value.
             suffix = cell['value'][3:]               
             try :       
-                rowHierarchy[i][j] = rowHierarchy[i - 1][j] + suffix
-                # self.log.debug("({},{}) Copied from above+suffix\nRow hierarchy {}".format(i, j, rowHierarchy[i]))
+                rowDimensions[i][prop] = rowDimensions[i - 1][prop] + suffix
+                # self.log.debug("({},{}) Copied from above+suffix\nRow hierarchy {}".format(i, j, rowValues[i]))
             except :
-                rowHierarchy[i][j] = cell['value']
-                # self.log.debug("({},{}) Top row, added value\nRow hierarchy {}".format(i, j, rowHierarchy[i]))
+                rowDimensions[i][prop] = cell['value']
+                # self.log.debug("({},{}) Top row, added value\nRow hierarchy {}".format(i, j, rowValues[i]))
         elif not cell['isEmpty']:
-            rowHierarchy[i][j] = cell['value']
-            # self.log.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowHierarchy[i]))
+            rowDimensions.setdefault(i, {})
+            rowDimensions[i][prop] = cell['value']
+            # self.log.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowValues[i]))
     
-    def handleColHeader(self, cell) :
+    def handleColHeader(self, cell, columnDimensions) :
         """
         Create relevant triples for the cell marked as Header
         """
@@ -251,39 +268,69 @@ class TabLinker(object):
         if self.insideMergeBox(cell['sheet'], cell['i'], cell['j']) and cell['isEmpty']:
             k, l = self.getMergeBoxCoord(cell['sheet'], cell['i'], cell['j'])
             self.log.debug("({},{}) Inside merge box ({}, {})".format(cell['i'], cell['j'], k, l))
-            dimension = cell['columnDimensions'][l][-1]
+            dimension = columnDimensions[l][-1]
         else:
             # Add a new dimension to the graph
             self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
             self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'ColumnHeader')))
-            self.dataGraph.add((cell['URI'], self.conf.getURI('skos', 'prefLabel'), Literal(cell['value'])))
+            #self.dataGraph.add((cell['URI'], RDF.type, RDF['Property']))
+            #self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+            self.dataGraph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
             self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
             # If there is already a parent dimension, connect to it
-            if cell['j'] in cell['columnDimensions']:
-                self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), cell['columnDimensions'][cell['j']][-1]))
+            if cell['j'] in columnDimensions:
+                self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))
         
             dimension = cell['URI']
             
         # Add the dimension to the dimensions list for that column
-        cell['columnDimensions'].setdefault(cell['j'], []).append(dimension)
+        columnDimensions.setdefault(cell['j'], []).append(dimension)
         
+    def handleRowProperty(self, cell, rowProperties) :
+        """
+        Create relevant triples for the cell marked as Property Dimension
+        """
+        dimension = None
+        
+        if self.insideMergeBox(cell['sheet'], cell['i'], cell['j']) and cell['isEmpty']:
+            k, l = self.getMergeBoxCoord(cell['sheet'], cell['i'], cell['j'])
+            self.log.debug("({},{}) Inside merge box ({}, {})".format(cell['i'], cell['j'], k, l))
+            dimension = rowProperties[l]
+        else:
+            # Add a new dimension to the graph
+            self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
+            self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'RowProperty')))
+            #self.dataGraph.add((cell['URI'], RDF.type, RDF['Property']))
+            #self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+            self.dataGraph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
+            self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
+            dimension = cell['URI']
+            
+        rowProperties[cell['j']] = dimension        
+    
+    def handleTitle(self, cell) :
+        """
+        Create relevant triples for the cell marked as Title 
+        """
+        self.dataGraph.add((cell['datasetURI'], self.conf.getURI('tablink','title'), Literal(cell['value'])))        
+    
     def parseHierarchicalRowHeader(self, i, j) :
         """
         Create relevant triples for the cell marked as HierarchicalRowHeader (i, j are row and column)
         """
         
-        # Use the rowhierarchy to create a unique qname for the cell's contents, 
+        # Use the rowValues to create a unique qname for the cell's contents, 
         # give the source_cell's original value as extra argument
         self.log.debug("Parsing HierarchicalRowHeader")
             
         # Add all the values
-        for (index, value) in self.rowhierarchy[i].items():
+        for (index, value) in self.rowValues[i].items():
             prop = self.property_dimensions[index]
             self.row_dimensions.setdefault(i, {})
             self.row_dimensions[i][self.namespaces['scope'][prop]] = Literal(value)
             
         # Relate the hierarchical headers
-        keys = self.rowhierarchy[i].keys()
+        keys = self.rowValues[i].keys()
         for i in range(len(keys) - 1):
             prop_top = self.namespaces['scope'][self.property_dimensions[keys[i]]]
             prop_sub = self.namespaces['scope'][self.property_dimensions[keys[i + 1]]]
@@ -292,13 +339,13 @@ class TabLinker(object):
 
     def parseRowLabel(self, i, j):
         """
-        Create relevant triples for the cell marked as Label (i, j are row and column)
+        Create relevant triples for the cell marked as Row Label (i, j are row and column)
         """  
         
         self.log.debug("Parsing Row Label")
         
-        # Get the QName of the HierarchicalRowHeader cell that this label belongs to, based on the rowhierarchy for this row (i)
-        hierarchicalRowHeader_value_qname = self.getQName(self.rowhierarchy[i])
+        # Get the QName of the HierarchicalRowHeader cell that this label belongs to, based on the rowValues for this row (i)
+        hierarchicalRowHeader_value_qname = self.getQName(self.rowValues[i])
         
         prefLabels = self.graph.objects(self.namespaces['scope'][hierarchicalRowHeader_value_qname], self.namespaces['skos'].prefLabel)
         for label in prefLabels :
@@ -313,63 +360,6 @@ class TabLinker(object):
         # Record that this source_cell_qname is the label for the HierarchicalRowHeader cell
         # self.graph.add((self.namespaces['scope'][self.source_cell_qname], self.namespaces['tablink']['isLabel'], self.namespaces['scope'][hierarchicalRowHeader_value_qname]))
     
-    def parseRowHeader(self, i, j) :
-        """
-        Create relevant triples for the cell marked as RowHeader (i, j are row and column)
-        """
-        rowHeaderValue = ""
-
-        # Don't attach the cell value to the namespace if it's already a URI
-        isURI = urlparse(str(self.source_cell.value))
-        if isURI.scheme and isURI.netloc:
-            rowHeaderValue = URIRef(self.source_cell.value)
-        else:
-            self.source_cell_value_qname = self.source_cell.value
-            rowHeaderValue = Literal(self.source_cell_value_qname)
-        
-        # Get the properties to use for the row headers
-        prop = self.property_dimensions[j]
-        self.row_dimensions.setdefault(i, {})
-        self.row_dimensions[i][self.namespaces['scope'][prop]] = rowHeaderValue
-        
-        return
-    
-    
-    def parseRowProperty(self, i, j) :
-        """
-        Create relevant triples for the cell marked as Property (i, j are row and column)
-        """
-        if self.isEmpty(i, j):
-            if self.insideMergeBox(i, j):
-                k, l = self.getMergeBoxCoord(i, j)
-                self.source_cell_value_qname = self.addValue(self.r_sheet.cell(k, l).value)
-            else:
-                return
-        else:
-            self.source_cell_value_qname = self.addValue(self.source_cell.value)   
-        # self.graph.add((self.namespaces['scope'][self.source_cell_qname],self.namespaces['tablink']['isDimensionProperty'],self.namespaces['scope'][self.source_cell_value_qname]))
-        # self.graph.add((self.namespaces['scope'][self.source_cell_value_qname],RDF.type,self.namespaces['qb']['DimensionProperty']))
-        # self.graph.add((self.namespaces['scope'][self.source_cell_value_qname],RDF.type,RDF['Property']))
-        
-        # self.property_dimensions.setdefault(j,[]).append(self.source_cell_value_qname)
-        self.property_dimensions[j] = self.source_cell_value_qname
-        
-        # Add to graph
-        resource = self.namespaces['scope'][self.property_dimensions[j]]
-        self.graph.add((resource, RDF.type, self.namespaces['tablink']['RowProperty']))
-
-        return
-    
-    def parseTitle(self, i, j) :
-        """
-        Create relevant triples for the cell marked as Title (i, j are row and column)
-        """
-        self.graph.add((self.namespaces['scope'][self.sheet_qname],
-                        self.namespaces['tablink']['title'],
-                        Literal(self.source_cell.value)))        
-        return
-        
-        
 
     def parseAnnotation(self, i, j) :
         """
