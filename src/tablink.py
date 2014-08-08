@@ -75,8 +75,6 @@ class TabLinker(object):
             logging.error("Whoops! Something went wrong in serializing to output file")
             logging.info(sys.exc_info())
             traceback.print_exc(file=sys.stdout)
-            
-        self.log.info('Done !')
         
     def parseSheet(self, n):
         """
@@ -219,10 +217,40 @@ class TabLinker(object):
                         self.conf.getURI('qb', 'DataSet')
                         ))
         self.graph.add((datasetURI,
+                        RDF.type,
+                        self.conf.getURI('prov', 'Entity')
+                        ))
+        self.graph.add((datasetURI,
                         self.conf.getURI('qb', 'structure'),
                         dsdURI
                         ))
-
+        self.graph.add((datasetURI,
+                        self.conf.getURI('tablink', 'sheetName'),
+                        Literal(sheet.name)
+                        ))
+        srcURI = datasetURI + '-src'
+        self.graph.add((datasetURI,
+                        self.conf.getURI('prov', 'wasDerivedFrom'),
+                        srcURI
+                        ))
+        self.graph.add((srcURI,
+                        RDF.type,
+                        self.conf.getURI('dcat', 'DataSet')
+                        ))
+        fileUri = srcURI + '-file'
+        self.graph.add((srcURI,
+                        self.conf.getURI('dcat', 'distribution'),
+                        fileUri
+                        ))
+        self.graph.add((fileUri,
+                        self.conf.getURI('dcterms', 'title'),
+                        Literal(os.path.basename(self.excelFileName))
+                        ))
+        self.graph.add((fileUri,
+                        self.conf.getURI('dcterms', 'accessURL'),
+                        URIRef('file://'+os.path.abspath(self.excelFileName))
+                        ))
+    
     def handleData(self, cell, columnDimensions, rowDimensions) :
         """
         Create relevant triples for the cell marked as Data
