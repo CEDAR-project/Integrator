@@ -2,6 +2,10 @@ from ConfigParser import SafeConfigParser
 import logging
 from rdflib.namespace import Namespace
 
+RAW_XLS_PATH = 'raw_xls'
+MARKING_PATH = 'marking'
+RAW_RDF_PATH = 'raw_rdf'
+
 class Configuration(object):
     def __init__(self, configFileName):
         try :
@@ -30,3 +34,6 @@ class Configuration(object):
     
     def getURI(self, ns, resourceName):
         return self.namespaces[ns][resourceName]
+    
+    def getPath(self, path):
+        return self.config.get('paths','root') + self.config.get('paths',path)

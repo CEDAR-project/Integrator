@@ -24,7 +24,7 @@ sys.setdefaultencoding("utf8")  # @UndefinedVariable
 pp = pprint.PrettyPrinter(indent=2)
 
 class TabLinker(object):
-    def __init__(self, conf, excelFileName, markingFileName, dataFileName, annotationsFileName=None):
+    def __init__(self, conf, excelFileName, markingFileName, dataFileName, processAnnotations = False):
         """
         Constructor
         """
@@ -33,20 +33,17 @@ class TabLinker(object):
         self.excelFileName = excelFileName
         self.markingFileName = markingFileName
         self.dataFileName = dataFileName
-        self.annotationsFileName = annotationsFileName
+        self.processAnnotations = processAnnotations
          
-        self.log.debug('Create graphs')
-        self.dataGraph = ConjunctiveGraph()
-        self.conf.bindNamespaces(self.dataGraph)
-        if self.annotationsFileName != None:
-            self.annotationGraph = ConjunctiveGraph()
-            self.conf.bindNamespaces(self.annotationGraph)
+        self.log.debug('Create graph')
+        self.graph = ConjunctiveGraph()
+        self.conf.bindNamespaces(self.graph)
         
         self.basename = os.path.basename(excelFileName)
         self.basename = re.search('(.*)\.xls', self.basename).group(1)
         
         self.log.debug('Loading Excel file {0}'.format(excelFileName))
-        self.wb = open_workbook(excelFileName, formatting_info=True)
+        self.wb = open_workbook(excelFileName, formatting_info=True, on_demand=True)
         
         self.log.debug('Loading Marking file {0}'.format(markingFileName))
         self.marking = {}
@@ -60,28 +57,20 @@ class TabLinker(object):
         """
         Start processing all the sheets in workbook
         """
-        self.log.info('Starting TabLinker for all sheets in workbook')
+        # self.log.info('Starting TabLinker for all sheets in workbook')
 
         # Process all the sheets        
         for n in range(self.wb.nsheets) :
-            self.log.info('Processing sheet {0}'.format(n))
+            # self.log.info('Processing sheet {0}'.format(n))
             self.parseSheet(n)
     
         # Save the result
-        self.log.info("Saving {} data triples.".format(len(self.dataGraph)))
+        self.log.info("Saving {} data triples.".format(len(self.graph)))
         try :
             out = bz2.BZ2File(self.dataFileName + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.dataFileName, "w")
-            self.dataGraph.serialize(destination=out, format='n3')
+            self.graph.serialize(destination=out, format='n3')
             # out.writelines(turtle)
             out.close()
-                                
-            # Annotations
-            if self.annotationsFileName != None:
-                self.log.info("Saving {} annotation triples.".format(len(self.annotationGraph)))
-                out = bz2.BZ2File(self.annotationsFileName + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.annotationsFileName, "w")
-                turtle = self.annotationGraph.serialize(destination=None, format='n3')
-                out.writelines(turtle)
-                out.close()
         except :
             logging.error("Whoops! Something went wrong in serializing to output file")
             logging.info(sys.exc_info())
@@ -135,10 +124,6 @@ class TabLinker(object):
                 }
                 
                 # self.log.debug("({},{}) {}/{}: \"{}\"". format(i, j, cellType, cellName, cellValue))
-                                            
-                # Parse annotation if any and if their processing is enabled
-                #if (i, j) in sheet.cell_note_map and self.annotationsFileName != None:
-                #    self.parseAnnotation(cell)
 
                 # Parse cell content
                 if cell['type'] == 'TL Data':
@@ -153,7 +138,11 @@ class TabLinker(object):
                     self.handleRowProperty(cell, rowProperties)
                 elif cell['type'] == 'TL Title' :
                     self.handleTitle(cell)
-        
+
+                # Parse annotation if any and if their processing is enabled
+                if (i, j) in sheet.cell_note_map and self.processAnnotations:
+                    self.handleAnnotation(cell)
+                    
         # Add additional information about the hierarchy of column headers
         # for value in columnDimensions.values():
         #    for index in range(1, len(value)):
@@ -164,13 +153,76 @@ class TabLinker(object):
         self.log.info("Done parsing...")
         
         # Write the ontology for tablinker
-        self.dataGraph.add((self.conf.getURI('tablink', 'value'), RDF.type, self.conf.getURI('qb', 'MeasureProperty')))
-        self.dataGraph.add((self.conf.getURI('tablink', 'cell'), RDF.type, RDF.Property))
-        self.dataGraph.add((self.conf.getURI('tablink', 'parentCell'), RDF.type, RDF.Property))
-        self.dataGraph.add((self.conf.getURI('tablink', 'dimension'), RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
-        self.dataGraph.add((self.conf.getURI('tablink', 'ColumnHeader'), RDFS.subClassOf, self.conf.getURI('qb', 'DimensionProperty')))
+        self.graph.add((self.conf.getURI('tablink', 'value'), RDF.type, self.conf.getURI('qb', 'MeasureProperty')))
+        self.graph.add((self.conf.getURI('tablink', 'cell'), RDF.type, RDF.Property))
+        self.graph.add((self.conf.getURI('tablink', 'parentCell'), RDF.type, RDF.Property))
+        self.graph.add((self.conf.getURI('tablink', 'dimension'), RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+        self.graph.add((self.conf.getURI('tablink', 'ColumnHeader'), RDFS.subClassOf, self.conf.getURI('qb', 'DimensionProperty')))
         
+        # Write the DSD
+        dsdURI = datasetURI + "-dsd"
+        self.graph.add((dsdURI,
+                        RDF.type,
+                        self.conf.getURI('qb', 'DataStructureDefinition')
+                        ))
+        ## The dimensions
+        order = 1
+        dimensions = []
+        for (_,dimmap) in rowDimensions.iteritems():
+            for (dim, _) in dimmap.iteritems():
+                if dim not in dimensions:
+                    dimensions.append(dim)
+        for dim in dimensions:
+            node = BNode();
+            self.graph.add((dsdURI,
+                            self.conf.getURI('qb', 'component'),
+                            node
+                            ))
+            self.graph.add((node,
+                            self.conf.getURI('qb', 'dimension'),
+                            dim
+                            ))
+            self.graph.add((node,
+                            self.conf.getURI('qb', 'order'),
+                            Literal(order)
+                            ))
+            order = order + 1
+        node = BNode();
+        self.graph.add((dsdURI,
+                        self.conf.getURI('qb', 'component'),
+                        node
+                        ))
+        self.graph.add((node,
+                        self.conf.getURI('qb', 'dimension'),
+                        self.conf.getURI('tablink', 'dimension')
+                        ))
+        self.graph.add((node,
+                        self.conf.getURI('qb', 'order'),
+                        Literal(order)
+                        ))
+        order = order + 1
         
+        ## The measure
+        node = BNode();
+        self.graph.add((dsdURI,
+                        self.conf.getURI('qb', 'component'),
+                        node
+                        ))
+        self.graph.add((node,
+                        self.conf.getURI('qb', 'measure'),
+                        self.conf.getURI('tablink', 'value')
+                        ))
+                        
+        # Describe the data set
+        self.graph.add((datasetURI,
+                        RDF.type,
+                        self.conf.getURI('qb', 'DataSet')
+                        ))
+        self.graph.add((datasetURI,
+                        self.conf.getURI('qb', 'structure'),
+                        dsdURI
+                        ))
+
     def handleData(self, cell, columnDimensions, rowDimensions) :
         """
         Create relevant triples for the cell marked as Data
@@ -179,27 +231,24 @@ class TabLinker(object):
             return
         
         # It's an observation
-        self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'Observation')))
+        self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'Observation')))
         
         # It's in the data set defined by the current sheet
-        self.dataGraph.add((cell['URI'], self.conf.getURI('qb', 'dataSet'), cell['datasetURI']))
+        self.graph.add((cell['URI'], self.conf.getURI('qb', 'dataSet'), cell['datasetURI']))
         
         # Add it's value
-        self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'], datatype=XSD.decimal)))
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'], datatype=XSD.decimal)))
         
         # Bind all the row dimensions
         try :
             for (prop, value) in rowDimensions[cell['i']].iteritems() :
-                self.dataGraph.add((cell['URI'], prop, Literal(value)))
+                self.graph.add((cell['URI'], prop, Literal(value)))
         except KeyError :
             self.log.debug("({}.{}) No row dimension for cell".format(cell['i'], cell['j']))
         
-        # Bind all the column dimensions
-        try:
-            for dim in columnDimensions[cell['j']]:
-                self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
-        except KeyError:
-            self.log.debug("({},{}) No column dimension for the cell".format(cell['i'], cell['j']))
+        # Bind the last of column dimensions, the others are linked via the parent cell property
+        dim = columnDimensions[cell['j']][-1]
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
         
     def handleRowHeader(self, cell, rowDimensions, rowProperties) :
         """
@@ -272,14 +321,14 @@ class TabLinker(object):
         else:
             # Add a new dimension to the graph
             self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'ColumnHeader')))
-            #self.dataGraph.add((cell['URI'], RDF.type, RDF['Property']))
-            #self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
-            self.dataGraph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
-            self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
+            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'ColumnHeader')))
+            # self.graph.add((cell['URI'], RDF.type, RDF['Property']))
+            # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+            self.graph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
+            self.graph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
             # If there is already a parent dimension, connect to it
             if cell['j'] in columnDimensions:
-                self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))
+                self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))
         
             dimension = cell['URI']
             
@@ -299,11 +348,11 @@ class TabLinker(object):
         else:
             # Add a new dimension to the graph
             self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'RowProperty')))
-            #self.dataGraph.add((cell['URI'], RDF.type, RDF['Property']))
-            #self.dataGraph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
-            self.dataGraph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
-            self.dataGraph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
+            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'RowProperty')))
+            # self.graph.add((cell['URI'], RDF.type, RDF['Property']))
+            # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+            self.graph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
+            self.graph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
             dimension = cell['URI']
             
         rowProperties[cell['j']] = dimension        
@@ -312,8 +361,53 @@ class TabLinker(object):
         """
         Create relevant triples for the cell marked as Title 
         """
-        self.dataGraph.add((cell['datasetURI'], self.conf.getURI('tablink','title'), Literal(cell['value'])))        
+        self.graph.add((cell['datasetURI'], self.conf.getURI('tablink', 'title'), Literal(cell['value'])))        
     
+    def handleAnnotation(self, cell) :
+        """
+        Create relevant triples for the annotation attached to cell (i, j)
+        """
+        i = cell['i']
+        j = cell['j']
+        annot = cell['sheet'].cell_note_map[(i, j)]
+        
+        # Create triples according to Open Annotation model
+        annotation = cell['URI'] + "-oa"
+        body = annotation + '-body'
+
+        self.graph.add((annotation,
+                        RDF.type,
+                        self.conf.getURI('oa','Annotation')
+                        ))
+        self.graph.add((annotation,
+                        self.conf.getURI('oa','hasTarget'),
+                        cell['URI']
+                        ))
+        self.graph.add((annotation,
+                        self.conf.getURI('oa','hasBody'),
+                        body
+                        ))
+        self.graph.add((body,
+                        RDF.value,
+                        Literal(annot.text.replace("\n", " ").replace("\r", " ").replace("\r\n", " ").encode('utf-8'))
+                        ))
+        self.graph.add((annotation,
+                        self.conf.getURI('oa','annotatedBy'),
+                        Literal(annot.author.encode('utf-8'))
+                        ))
+        self.graph.add((annotation,
+                        self.conf.getURI('oa','serializedBy'),
+                        URIRef("https://github.com/Data2Semantics/TabLinker")
+                        ))
+        self.graph.add((annotation,
+                        self.conf.getURI('oa','serializedAt'),
+                        Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.conf.getURI('xsd','date'))
+                        ))
+        self.graph.add((annotation,
+                        self.conf.getURI('oa','modelVersion'),
+                        URIRef("http://www.openannotation.org/spec/core/20130208/index.html")
+                        ))
+        
     def parseHierarchicalRowHeader(self, i, j) :
         """
         Create relevant triples for the cell marked as HierarchicalRowHeader (i, j are row and column)
@@ -361,51 +455,6 @@ class TabLinker(object):
         # self.graph.add((self.namespaces['scope'][self.source_cell_qname], self.namespaces['tablink']['isLabel'], self.namespaces['scope'][hierarchicalRowHeader_value_qname]))
     
 
-    def parseAnnotation(self, i, j) :
-        """
-        Create relevant triples for the annotation attached to cell (i, j)
-        """
-
-        # Create triples according to Open Annotation model
-
-        body = BNode()
-
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  RDF.type,
-                                  self.annotationNamespaces['oa']['Annotation']
-                                  ))
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  self.annotationNamespaces['oa']['hasBody'],
-                                  body
-                                  ))
-        self.annotationGraph.add((body,
-                                  RDF.value,
-                                  Literal(self.annotations[(i, j)].text.replace("\n", " ").replace("\r", " ").replace("\r\n", " ").encode('utf-8'))
-                                  ))
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  self.annotationNamespaces['oa']['hasTarget'],
-                                  self.namespaces['scope'][self.source_cell_qname]
-                                  ))
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  self.annotationNamespaces['oa']['annotator'],
-                                  Literal(self.annotations[(i, j)].author.encode('utf-8'))
-                                  ))
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  self.annotationNamespaces['oa']['annotated'],
-                                  Literal(datetime.datetime.fromtimestamp(os.path.getmtime(self.filename)).strftime("%Y-%m-%d"), datatype=self.annotationNamespaces['xsd']['date'])
-                                  ))
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  self.annotationNamespaces['oa']['generator'],
-                                  URIRef("https://github.com/Data2Semantics/TabLinker")
-                                  ))
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  self.annotationNamespaces['oa']['generated'],
-                                  Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.annotationNamespaces['xsd']['date'])
-                                  ))
-        self.annotationGraph.add((self.annotationNamespaces['scope'][self.source_cell_qname],
-                                  self.annotationNamespaces['oa']['modelVersion'],
-                                  URIRef("http://www.openannotation.org/spec/core/20120509.html")
-                                  ))
     # ##
     #    Utility Functions
     # ## 
@@ -571,7 +620,7 @@ if __name__ == '__main__':
     markingFile = "data-test/simple-marking.txt"
     dataFile = "/tmp/data.ttl"
 
-    tLinker = TabLinker(config, inputFile, markingFile, dataFile)
+    tLinker = TabLinker(config, inputFile, markingFile, dataFile, processAnnotations = True)
     tLinker.doLink()
     
 

@@ -1,3 +1,7 @@
+*
+!*/
+!.gitignore
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -53,6 +57,11 @@ coverage.xml
 docs/_build/
 .project
 .pydevproject
-/credentials.txt
 .project
 .pydevproject
+
+# Output
+data/output
+credentials-virtuoso.txt
+credentials.txt
+
