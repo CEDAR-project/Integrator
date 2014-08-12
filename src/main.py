@@ -1,11 +1,15 @@
 #!/usr/bin/python
-from common.configuration import Configuration, RAW_XLS_PATH, MARKING_PATH,\
-    RAW_RDF_PATH
+from common.configuration import Configuration, RAW_XLS_PATH, MARKING_PATH, \
+    RAW_RDF_PATH, RULES_PATH
 import glob
 import os
 import bz2
 from tablink import TabLinker
 from push import Pusher
+from rules import RuleMaker
+import logging
+
+log = logging.getLogger("Main")
 
 def generate_raw_rdf(config):
     '''
@@ -36,6 +40,7 @@ def push_raw_rdf_to_virtuoso(config):
     '''
     Push the raw rdf graphs to virtuoso
     '''
+    pusher = Pusher()
     raw_rdf_files = glob.glob(config.getPath(RAW_RDF_PATH) + '/*')
     for raw_rdf_file in sorted(raw_rdf_files):
         name = os.path.basename(raw_rdf_file).split('.')[0]
@@ -47,13 +52,56 @@ def push_raw_rdf_to_virtuoso(config):
             f.write(uncompressedData)
             f.close()
             data_file = '/tmp/graph.ttl'
-        print named_graph
-        pusher = Pusher(named_graph, data_file)
-        pusher.upload_graph()
+        log.info("Push " + named_graph)
+        pusher.clean_graph(named_graph)
+        pusher.upload_graph(named_graph, data_file)
         
+
+def generate_harmonization_rules(config):
+    '''
+    Generate harmonization rules
+    '''
+    rulesMaker = RuleMaker(config)
+    raw_rdf_files = glob.glob(config.getPath(RAW_RDF_PATH) + '/*')
+    for raw_rdf_file in sorted(raw_rdf_files):
+        name = os.path.basename(raw_rdf_file).split('.')[0]
+        named_graph = 'urn:graph:cedar:raw-rdf:' + name
+        output = config.getPath(RULES_PATH) + '/' + name + '.ttl'
+        rulesMaker.process(named_graph, output)
+
+
+def push_harmonization_rules_to_virtuoso(config):
+    '''
+    Push the rules into a named graph
+    '''
+    pusher = Pusher()
+    named_graph = 'urn:graph:cedar:harmonization_rules'
+    pusher.clean_graph(named_graph)
+    
+    rules_files = glob.glob(config.getPath(RULES_PATH) + '/*')
+    for rules_file in sorted(rules_files):
+        name = os.path.basename(rules_file).split('.')[0]
+        data_file = rules_file
+        if data_file.endswith('.bz2'):
+            f = open('/tmp/rules.ttl', 'wb')
+            f.write(bz2.BZ2File(data_file).read())
+            f.close()
+            data_file = '/tmp/rules.ttl'
+        log.info("Add the content of " + name)
+        pusher.upload_graph(named_graph, data_file)
+
 if __name__ == '__main__':
     config = Configuration('config.ini')
 
-    #generate_raw_rdf(config)
-    #push_raw_rdf_to_virtuoso(config)
+    # Step 1 : combine the raw xls files and the marking information to produce raw rdf
+    # generate_raw_rdf(config)
+    
+    # Step 2 : push all the raw rdf to the triple store
+    # push_raw_rdf_to_virtuoso(config)
+    
+    # Step 3 : generate harmonization rules
+    # generate_harmonization_rules(config)
+    
+    # Step 4 : push the rules to virtuoso under the named graph for the rules
+    push_harmonization_rules_to_virtuoso(config)
     

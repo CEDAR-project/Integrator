@@ -4,15 +4,13 @@ SPARQL = "http://lod.cedar-project.nl:8080/sparql"
 SERVER = "http://lod.cedar-project.nl:8080/sparql-graph-crud"
 
 class Pusher(object):
-    def __init__(self, uri, turle_file):
+    def __init__(self):
         self.user = ':'.join([c.strip() for c in open('credentials-virtuoso.txt')])
-        self.uri = uri
-        self.turle_file = turle_file
         
-    def upload_graph(self):
+    def clean_graph(self, uri):
         # Clear the previous graph
         c = pycurl.Curl()
-        values = [("query", "CLEAR GRAPH <%s>" % self.uri)]
+        values = [("query", "CLEAR GRAPH <%s>" % uri)]
         c.setopt(c.URL, SPARQL)
         c.setopt(c.USERPWD, self.user)
         c.setopt(c.HTTPPOST, values)
@@ -20,9 +18,10 @@ class Pusher(object):
         c.perform()
         c.close()
     
+    def upload_graph(self, uri, turle_file):
         # Upload the new data    
         c = pycurl.Curl()
-        values = [("res-file", (pycurl.FORM_FILE, self.turle_file)),("graph-uri", self.uri)]
+        values = [("res-file", (pycurl.FORM_FILE, turle_file)),("graph-uri", uri)]
         c.setopt(c.URL, SERVER)
         c.setopt(c.USERPWD, self.user)
         c.setopt(c.HTTPPOST, values)

@@ -264,8 +264,8 @@ class TabLinker(object):
         # It's in the data set defined by the current sheet
         self.graph.add((cell['URI'], self.conf.getURI('qb', 'dataSet'), cell['datasetURI']))
         
-        # Add it's value
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'], datatype=XSD.decimal)))
+        # Add it's value (removed the datatype=XSD.decimal because we can't be sure)
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'])))
         
         # Bind all the row dimensions
         try :

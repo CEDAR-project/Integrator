@@ -1,44 +1,48 @@
 from rdflib import ConjunctiveGraph, Namespace, Literal, RDF, RDFS, BNode, URIRef
 import csv
+import logging
 
 class Codes(object):
     
-    def __init__(self):
+    def __init__(self, configuration):
+        self.conf = configuration
+        self.log = logging.getLogger("RuleMaker")
+        
         # Declare the dimensions
         self.dimensions = {
-            self.namespaces['sdmx-dimension']['sex'] : {
-                'fileName' : 'codes/sex.csv',
+            self.conf.getURI('sdmx-dimension','sex') : {
+                'fileName' : 'data/input/codes/sex.csv',
                 'map' : dict()
             },
-            self.namespaces['cedar']['maritalStatus'] : {
-                'fileName' : 'codes/marital_status.csv',
+            self.conf.getURI('cedar','maritalStatus') : {
+                'fileName' : 'data/input/codes/marital_status.csv',
                 'map' : dict()
             },
-            self.namespaces['cedar']['occupationPosition'] : {
-                'fileName' : 'codes/occupation_position.csv',
+            self.conf.getURI('cedar','occupationPosition') : {
+                'fileName' : 'data/input/codes/occupation_position.csv',
                 'map' : dict()
             },
-            self.namespaces['cedar']['occupation'] : {
-                'fileName' : 'codes/occupation.csv',
+            self.conf.getURI('cedar','occupation') : {
+                'fileName' : 'data/input/codes/occupation.csv',
                 'map' : dict()
             },
-            self.namespaces['cedar']['belief'] : {
-                'fileName' : 'codes/belief.csv',
+            self.conf.getURI('cedar','belief') : {
+                'fileName' : 'data/input/codes/belief.csv',
                 'map' : dict()
             },
-            self.namespaces['cedar']['city'] : {
-                'fileName' : 'codes/city.csv',
+            self.conf.getURI('cedar','city') : {
+                'fileName' : 'data/input/codes/city.csv',
                 'map' : dict()
             },
-            self.namespaces['cedar']['province'] : {
-                'fileName' : 'codes/province.csv',
+            self.conf.getURI('cedar','province') : {
+                'fileName' : 'data/input/codes/province.csv',
                 'map' : dict()
             }
         }
         
         # Load the content of the files
         for dim in self.dimensions.values():
-            print "Loading %s ..." % dim['fileName']            
+            self.log.debug("Loading %s ..." % dim['fileName'])    
             f  = open(dim['fileName'], "rb")
             reader = csv.reader(f)
             header_row = True
@@ -55,7 +59,6 @@ class Codes(object):
                 else:
                     dim['map'][row[0]] = Literal(row[1])
             f.close()
-            print "Got %d entries" % len(dim['map'].keys())
     
     def get_code(self, dimension, literal):
         """
