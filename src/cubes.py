@@ -115,7 +115,9 @@ class CubeMaker(object):
             if p != RDF.type:
                 observations.setdefault(observation, [])
                 observations[observation].append((p,o))
-                
+        
+        self.log.info("Process observations : " + len(observations))
+        
         # Process observations
         for (observation, description) in observations.iteritems():
             # Get an harmonised observation

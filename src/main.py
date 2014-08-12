@@ -43,20 +43,13 @@ def push_raw_rdf_to_virtuoso(config):
     Push the raw rdf graphs to virtuoso
     '''
     pusher = Pusher()
+    named_graph = 'urn:graph:cedar:raw-rdf'
+    pusher.clean_graph(named_graph)
+    
     raw_rdf_files = glob.glob(config.getPath(RAW_RDF_PATH) + '/*')
     for raw_rdf_file in sorted(raw_rdf_files):
-        name = os.path.basename(raw_rdf_file).split('.')[0]
-        named_graph = 'urn:graph:cedar:raw-rdf:' + name
-        data_file = raw_rdf_file
-        if data_file.endswith('.bz2'):
-            uncompressedData = bz2.BZ2File(data_file).read()
-            f = open('/tmp/graph.ttl', 'wb')
-            f.write(uncompressedData)
-            f.close()
-            data_file = '/tmp/graph.ttl'
-        log.info("Push " + named_graph)
-        pusher.clean_graph(named_graph)
-        pusher.upload_graph(named_graph, data_file)
+        log.info("Add the content of " + raw_rdf_file)
+        pusher.upload_graph(named_graph, raw_rdf_file)
 
 def generate_harmonization_rules(config):
     '''
@@ -80,16 +73,8 @@ def push_harmonization_rules_to_virtuoso(config):
     
     rules_files = glob.glob(config.getPath(RULES_PATH) + '/*')
     for rules_file in sorted(rules_files):
-        name = os.path.basename(rules_file).split('.')[0]
-        data_file = rules_file
-        if data_file.endswith('.bz2'):
-            f = open('/tmp/rules.ttl', 'wb')
-            f.write(bz2.BZ2File(data_file).read())
-            f.close()
-            data_file = '/tmp/rules.ttl'
-        log.info("Add the content of " + name)
-        pusher.upload_graph(named_graph, data_file)
-
+        log.info("Add the content of " + rules_file)
+        pusher.upload_graph(named_graph, rules_file)
 
 def create_harmonized_dataset(config):
     '''
@@ -116,7 +101,6 @@ def create_harmonized_dataset(config):
     log.info("Save additional data")
     cube.save_data()
     
-
 def push_release_to_virtuoso(config):
     pusher = Pusher()
     named_graph = 'urn:graph:cedar:harmonised_data'
@@ -137,7 +121,7 @@ if __name__ == '__main__':
     # Step 2 : push all the raw rdf to the triple store
     # push_raw_rdf_to_virtuoso(config)
     
-    # Step 3 : generate harmonization rules
+    # Step 3 : generate harmonisation rules
     # generate_harmonization_rules(config)
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
