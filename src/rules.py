@@ -14,6 +14,9 @@ from common.util import clean_string
 from common.sparql import SPARQLWrap
 from rdflib.term import Literal
 
+# HOTFIXES needed
+# - Bind the rules to the dataset, use it to generate the name and add a triple
+
 class RuleMaker(object):
     def __init__(self, configuration):
         """

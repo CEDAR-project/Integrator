@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 """
 Convert Excel files with matching style into RDF cubes
 
@@ -6,9 +6,8 @@ Code derived from TabLinker
 """
 from xlutils.margins import number_of_good_cols, number_of_good_rows
 from xlrd import open_workbook, XL_CELL_EMPTY, XL_CELL_BLANK, cellname
-from rdflib import ConjunctiveGraph, Literal, RDF, BNode, URIRef, XSD, RDFS
+from rdflib import ConjunctiveGraph, Literal, RDF, BNode, URIRef, RDFS
 import re
-import urllib
 import logging
 import datetime
 import bz2
@@ -28,6 +27,7 @@ pp = pprint.PrettyPrinter(indent=2)
 # - Do not put the sheet name in the source URI (e.g. no "VT_1947_A1_T_S1-src")
 # - Add prov:Entity type to all observations
 # - Add prov information to say this was generated with tablink
+# - Add schema information with qb terms to better filter observations in cubes
 
 class TabLinker(object):
     def __init__(self, conf, excelFileName, markingFileName, dataFileName, processAnnotations = False):
@@ -442,53 +442,6 @@ class TabLinker(object):
                         URIRef("http://www.openannotation.org/spec/core/20130208/index.html")
                         ))
         
-    def parseHierarchicalRowHeader(self, i, j) :
-        """
-        Create relevant triples for the cell marked as HierarchicalRowHeader (i, j are row and column)
-        """
-        
-        # Use the rowValues to create a unique qname for the cell's contents, 
-        # give the source_cell's original value as extra argument
-        self.log.debug("Parsing HierarchicalRowHeader")
-            
-        # Add all the values
-        for (index, value) in self.rowValues[i].items():
-            prop = self.property_dimensions[index]
-            self.row_dimensions.setdefault(i, {})
-            self.row_dimensions[i][self.namespaces['scope'][prop]] = Literal(value)
-            
-        # Relate the hierarchical headers
-        keys = self.rowValues[i].keys()
-        for i in range(len(keys) - 1):
-            prop_top = self.namespaces['scope'][self.property_dimensions[keys[i]]]
-            prop_sub = self.namespaces['scope'][self.property_dimensions[keys[i + 1]]]
-            self.graph.add((prop_sub, self.namespaces['tablink']['subPropertyOf'], prop_top))
-        
-
-    def parseRowLabel(self, i, j):
-        """
-        Create relevant triples for the cell marked as Row Label (i, j are row and column)
-        """  
-        
-        self.log.debug("Parsing Row Label")
-        
-        # Get the QName of the HierarchicalRowHeader cell that this label belongs to, based on the rowValues for this row (i)
-        hierarchicalRowHeader_value_qname = self.getQName(self.rowValues[i])
-        
-        prefLabels = self.graph.objects(self.namespaces['scope'][hierarchicalRowHeader_value_qname], self.namespaces['skos'].prefLabel)
-        for label in prefLabels :
-            # If the hierarchicalRowHeader QName already has a preferred label, turn it into a skos:altLabel
-            self.graph.remove((self.namespaces['scope'][hierarchicalRowHeader_value_qname], self.namespaces['skos'].prefLabel, label))
-            self.graph.add((self.namespaces['scope'][hierarchicalRowHeader_value_qname], self.namespaces['skos'].altLabel, label))
-            self.log.debug("Turned skos:prefLabel {} for {} into a skos:altLabel".format(label, hierarchicalRowHeader_value_qname))
-        
-        # Add the value of the label cell as skos:prefLabel to the header cell
-        # self.graph.add((self.namespaces['scope'][hierarchicalRowHeader_value_qname], self.namespaces['skos'].prefLabel, Literal(self.source_cell.value, 'nl')))
-            
-        # Record that this source_cell_qname is the label for the HierarchicalRowHeader cell
-        # self.graph.add((self.namespaces['scope'][self.source_cell_qname], self.namespaces['tablink']['isLabel'], self.namespaces['scope'][hierarchicalRowHeader_value_qname]))
-    
-
     # ##
     #    Utility Functions
     # ## 
@@ -532,22 +485,6 @@ class TabLinker(object):
             if i <= rhi - 1 and i >= rlo and j <= chi - 1 and j >= clo:
                 return (rlo, clo)            
          
-    def getType(self, style):
-        """Get type for a given excel style. Style name must be prefixed by 'TL '
-    
-        Arguments:
-        style -- Style (string) to check type for
-        
-        Returns:
-        String -- The type of this field. In case none is found, 'unknown'
-        """
-        typematch = re.search('TL\s(.*)', style)
-        if typematch :
-            cellType = typematch.group(1)
-        else :
-            cellType = 'Unknown'
-        return cellType
-    
     def isEmpty(self, cell):
         """
         Check whether a cell is empty.
@@ -590,61 +527,6 @@ class TabLinker(object):
             if not self.isEmpty(i, j):
                 return False
         return True
-    
-    def getValidRowsCols(self) :
-        """
-        Determine the number of non-empty rows and columns in the Excel sheet
-        
-        Returns:
-        rowns -- number of rows
-        colns -- number of columns
-        """
-        colns = number_of_good_cols(self.r_sheet)
-        rowns = number_of_good_rows(self.r_sheet)
-        
-        # Check whether the number of good columns and rows are correct
-        while self.isEmptyRow(rowns - 1, colns) :
-            rowns = rowns - 1 
-        while self.isEmptyColumn(colns - 1, rowns) :
-            colns = colns - 1
-            
-        self.log.debug('Number of rows with content:    {0}'.format(rowns))
-        self.log.debug('Number of columns with content: {0}'.format(colns))
-        return rowns, colns
-    
-    def getQName(self, names):
-        """
-        Create a valid QName from a string or dictionary of names
-        
-        Arguments:
-        names -- Either dictionary of names or string of a name.
-        
-        Returns:
-        qname -- a valid QName for the dictionary or string
-        """
-        
-        if type(names) == dict :
-            qname = self.sheet_qname
-            for k in names :
-                qname = qname + '_' + self.processString(names[k])
-        else :
-            qname = self.sheet_qname + '_' + self.processString(names)
-        
-        self.log.debug('Minted new QName: {}'.format(qname))
-        return qname
-
-    def processString(self, string):
-        """
-        Remove illegal characters (comma, brackets, etc) from string, and replace it with underscore. Useful for URIs
-        
-        Arguments:
-        string -- The string representing the value of the source cell
-        
-        Returns:
-        processedString -- The processed string
-        """
-        # TODO accents too
-        return urllib.quote(re.sub('\s|\(|\)|,|\.', '_', unicode(string).strip().replace('/', '-')).encode('utf-8', 'ignore'))
          
 if __name__ == '__main__':
     config = Configuration('config.ini')

@@ -1,5 +1,5 @@
 #!/usr/bin/python2
-from rdflib import ConjunctiveGraph, Literal, RDF, URIRef
+from rdflib import ConjunctiveGraph, Literal, RDF
 from codes import Codes
 from common.configuration import Configuration
 from common.sparql import SPARQLWrap
@@ -33,7 +33,7 @@ class RulesFetch(object):
         
     def get_rules_for(self, target_dim, target_value):
         params = {'DIM' : target_dim.n3(), 'VAL' : target_value.n3()}
-        key = hash(tuple(params.items()))
+        key = target_dim.n3() + "_" + target_value.n3()
         
         # If we already have the rules return them (could be None)
         if key in self.rules:
@@ -52,6 +52,7 @@ class RulesFetch(object):
         """
         results = self.sparql.run_select(query, params)
         if len(results) == 0:
+            self.rules[key] = None
             return None
         for result in results:
             rule = {'type': self.sparql.format(result['type'])}
@@ -116,10 +117,12 @@ class CubeMaker(object):
                 observations.setdefault(observation, [])
                 observations[observation].append((p,o))
         
-        self.log.info("Process observations : " + len(observations))
+        self.log.info("Process %d observations" % len(observations))
         
         # Process observations
         for (observation, description) in observations.iteritems():
+            self.log.info(observation)
+            
             # Get an harmonised observation
             harmonized_po = self._process_observation(rules, description)
             
