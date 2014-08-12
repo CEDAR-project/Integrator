@@ -5,11 +5,14 @@ import uuid
 import bz2
 import operator
 import logging
+import sys
+import random
 
 from codes import Codes
 from common.configuration import Configuration
 from common.util import clean_string
-import sys
+from common.sparql import SPARQLWrap
+from rdflib.term import Literal
 
 class RuleMaker(object):
     def __init__(self, configuration):
@@ -21,13 +24,16 @@ class RuleMaker(object):
         self.conf = configuration
         self.log = logging.getLogger("RuleMaker")
     
+        # Create a wrapper for SPARQL queries
+        self.sparql = SPARQLWrap(self.conf)
+
     def _run_query(self, query, params):
         '''
         Small utility function to execute a SPARQL select
         '''
         sparql = SPARQLWrapper(self.conf.get_SPARQL())
-        for (k,v) in params.iteritems():
-            query = query.replace(k,v)
+        for (k, v) in params.iteritems():
+            query = query.replace(k, v)
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         sparql.setCredentials('rdfread', 'red_fred')
@@ -35,14 +41,14 @@ class RuleMaker(object):
         return results["results"]["bindings"]
     
     def process(self, graph_uri, output_file):
+        self.log.info("Start processing %s" % graph_uri)
+        
         # Initialise the graph
         graph = ConjunctiveGraph()
         self.conf.bindNamespaces(graph)
         
-        # Fix the parameters for that graph
-        query_params = {'PREFIX' : self.conf.get_prefixes(), 'GRAPH' : graph_uri}
-        
-        self.log.info("Start processing %s" % graph_uri)
+        # Fix the parameters for the SPARQL queries
+        query_params = {'GRAPH' : graph_uri}
         
         #####
         # Start with the column headers
@@ -50,14 +56,14 @@ class RuleMaker(object):
         
         # Get a list of all the column headers
         headers = {}
-        query = """PREFIX
+        query = """
         select distinct * from <GRAPH> where {
         ?header rdfs:label ?label.
         ?header a tablink:ColumnHeader.
         ?header tablink:parentCell ?parent.
         ?parent a tablink:ColumnHeader.
         } """
-        results = self._run_query(query, query_params)
+        results = self.sparql.run_select(query, query_params)
         for result in results:
             resource = URIRef(result['header']['value'])
             headers[resource] = {}
@@ -83,12 +89,12 @@ class RuleMaker(object):
         # Move on to the row headers
         #####
         headers = {}
-        query = """PREFIX 
+        query = """ 
         select distinct ?header ?label from <GRAPH> where {
         ?header a tablink:RowProperty.
         ?header rdfs:label ?label.
         } """
-        results = self._run_query(query, query_params)
+        results = self.sparql.run_select(query, query_params)
         for result in results:
             resource = URIRef(result['header']['value'])
             headers[resource] = {}
@@ -116,26 +122,29 @@ class RuleMaker(object):
             
     def process_row_header(self, graph, query_params, header, label):
         """
-        Process a row header.
-        We get a sample of the values found in the rows and guess the type
-        from it
+        Process a row header. Get all the possible values and find a possible
+        best match
         """
-        sample = []
-        query = """PREFIX
+        labels = []
+        query = """
         select distinct ?label from <GRAPH> where {
         ?obs a qb:Observation.
         ?obs <DIM> ?label.
-        } limit 20
+        } order by ?label
         """.replace('DIM', header)
-        results = self._run_query(query, query_params)
+        results = self.sparql.run_select(query, query_params)
         for result in results:
             label = clean_string(result['label']['value'])
             if 'totaal' not in label:
-                sample.append(label)
+                labels.append(label)
         
-        # If the sample is empty forget about this header
-        if len(sample) == 0:
+        # If there is no associated label forget about this header
+        if len(labels) == 0:
             return
+        
+        # Create a small sample to detect the dimension
+        size = min(20, len(labels))
+        sample = [ labels[i] for i in sorted(random.sample(xrange(len(labels)), size))]
         
         # Tweak: try to see if we have a sample that correspond to years
         # see e.g. table VT_1859_02_H1
@@ -149,7 +158,10 @@ class RuleMaker(object):
             years = False
         # if the column contains years it should be a birth year
         if years:
-            self.create_rule_set_dimension(graph, header, self.conf.getURI('cedar','birthYear'))
+            for label in labels:
+                self.create_rule_set_value(graph, 
+                                           header, Literal(label), 
+                                           self.conf.getURI('cedar', 'birthYear'), Literal(label))
             return
         
         # Check if we can find the dimension associated to this header
@@ -157,8 +169,8 @@ class RuleMaker(object):
         for entry in sample:
             result = self.codes.detect_code(entry)
             if result != None:
-                (dim,_) = result
-                counts.setdefault(dim,0)
+                (dim, _) = result
+                counts.setdefault(dim, 0)
                 counts[dim] = counts[dim] + 1
         
         # If we can't find any possible match, skip this header        
@@ -167,11 +179,11 @@ class RuleMaker(object):
         
         # Get the dimension with the highest count
         sorted_counts = sorted(counts.iteritems(), key=operator.itemgetter(1), reverse=True)
-        (dimension,_) = sorted_counts[0]
+        (dimension, _) = sorted_counts[0]
                 
         # Tweak: jobPosition can not be in a hierarchical position
         # verify that the header is not the sub header of something
-        #if dimension == self.conf.getURI('cedar','occupationPosition'):
+        # if dimension == self.conf.getURI('cedar','occupationPosition'):
         #    sparql = SPARQLWrapper(self.endpoint)
         #    query = """
         #    ask from <GRAPH> {
@@ -183,8 +195,12 @@ class RuleMaker(object):
         #    if sparql.query().convert()['boolean']:
         #        return
         
-        # Create a rule to bind the dimension to this header    
-        self.create_rule_set_dimension(graph, header, dimension)
+        # Create a rule to bind the dimension to this header
+        for label in labels:
+            v = self.codes.get_code(dimension, label)
+            if v != None:
+                d = (dimension, v)
+                self.create_rule_set_value(graph, header, Literal(label), d)
         
     def process_column_header(self, graph, headers, header):
         """
@@ -203,11 +219,13 @@ class RuleMaker(object):
             
             # Add all the results
             for dimension in dimensions:
-                (source, dim) = dimension
-                self.create_rule_add_dimension_value(graph, header, source, dim)
+                (_, dim) = dimension
+                target_dim = self.conf.getURI('tablink', 'dimension')
+                self.create_rule_set_value(graph, target_dim, header, dim)
         else:
             # Add a rule to ignore this observation
-            self.create_rule_ignore_observation(graph, header, header_with_total)
+            target_dim = self.conf.getURI('tablink', 'dimension')
+            self.create_rule_ignore_observation(graph, target_dim, header)
                 
     
     def detect_dimensions(self, dimensions, headers, header):
@@ -263,68 +281,51 @@ class RuleMaker(object):
         
         return None
         
-    def create_rule_add_dimension_value(self, graph, target, source, dimensionvalue):
+    def create_rule_set_value(self, graph, target_dim, target_val, dimensionvalue):
         """
         Create a new harmonization rule that assign a dimension and value
         to all the observations having the targetDimension as a dimension
         """
         (dimension, value) = dimensionvalue
-        resource = self.conf.getURI('rules',str(uuid.uuid1()))
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('harmonizer','AddDimensionValue')))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer','targetDimension'),
-                   target))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer','generatedFrom'),
-                   source))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer','dimension'),
-                   dimension))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer','value'),
-                   value))
-    
-    def create_rule_set_dimension(self, graph, target, dimension):
-        """
-        Create a new harmonization rule that assign a dimension to a given
-        header. The actual value will be resolved at the creation of the
-        harmonized cubes
-        """
         resource = self.conf.getURI('rules', str(uuid.uuid1()))
         graph.add((resource,
-                        RDF.type,
-                        self.conf.getURI('harmonizer','SetDimension')))
+                   RDF.type,
+                   self.conf.getURI('harmonizer', 'SetValue')))
         graph.add((resource,
-                        self.conf.getURI('harmonizer','targetDimension'),
-                        target))
+                   self.conf.getURI('harmonizer', 'targetDimension'),
+                   target_dim))
         graph.add((resource,
-                        self.conf.getURI('harmonizer','dimension'),
-                        dimension))
+                   self.conf.getURI('harmonizer', 'targetValue'),
+                   target_val))
+        graph.add((resource,
+                   self.conf.getURI('harmonizer', 'dimension'),
+                   dimension))
+        graph.add((resource,
+                   self.conf.getURI('harmonizer', 'value'),
+                   value))    
         
-    def create_rule_ignore_observation(self, graph, target, source):
+    def create_rule_ignore_observation(self, graph, target_dim, target_val):
         """
         Create a new harmonization rule that tells to ignore observations
         associated to the target dimension
         """
-        resource = self.conf.getURI('rules',str(uuid.uuid1()))
+        resource = self.conf.getURI('rules', str(uuid.uuid1()))
         graph.add((resource,
-                        RDF.type,
-                        self.conf.getURI('harmonizer','IgnoreObservation')))
+                   RDF.type,
+                   self.conf.getURI('harmonizer', 'IgnoreObservation')))
         graph.add((resource,
-                        self.conf.getURI('harmonizer','targetDimension'),
-                        target))
+                   self.conf.getURI('harmonizer', 'targetDimension'),
+                   target_dim))
         graph.add((resource,
-                        self.conf.getURI('harmonizer','generatedFrom'),
-                        source))
+                   self.conf.getURI('harmonizer', 'targetValue'),
+                   target_val))
         
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
     
     # Test
-    graph = "urn:graph:cedar:raw-rdf:VT_1879_07_H2"
+    graph = "urn:graph:cedar:raw-rdf:VT_1947_A1_T"
     rulesMaker = RuleMaker(config)
     rulesMaker.process(graph, '/tmp/rule.ttl')
     

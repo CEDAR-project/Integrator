@@ -23,6 +23,12 @@ sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
 pp = pprint.PrettyPrinter(indent=2)
 
+# HOTFIX needed
+# - Several sheets from a same file need to be associated to the same source
+# - Do not put the sheet name in the source URI (e.g. no "VT_1947_A1_T_S1-src")
+# - Add prov:Entity type to all observations
+# - Add prov information to say this was generated with tablink
+
 class TabLinker(object):
     def __init__(self, conf, excelFileName, markingFileName, dataFileName, processAnnotations = False):
         """

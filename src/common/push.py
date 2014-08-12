@@ -1,4 +1,5 @@
 import pycurl
+import bz2
 
 SPARQL = "http://lod.cedar-project.nl:8080/sparql"
 SERVER = "http://lod.cedar-project.nl:8080/sparql-graph-crud"
@@ -19,9 +20,16 @@ class Pusher(object):
         c.close()
     
     def upload_graph(self, uri, turle_file):
+        data_file = turle_file
+        if turle_file.endswith('.bz2'):
+            data_file = '/tmp/data.ttl'
+            f = open(data_file, 'wb')
+            f.write(bz2.BZ2File(turle_file).read())
+            f.close()
+            
         # Upload the new data    
         c = pycurl.Curl()
-        values = [("res-file", (pycurl.FORM_FILE, turle_file)),("graph-uri", uri)]
+        values = [("res-file", (pycurl.FORM_FILE, data_file)),("graph-uri", uri)]
         c.setopt(c.URL, SERVER)
         c.setopt(c.USERPWD, self.user)
         c.setopt(c.HTTPPOST, values)

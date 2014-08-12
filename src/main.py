@@ -5,9 +5,11 @@ import glob
 import os
 import bz2
 from tablink import TabLinker
-from push import Pusher
+from common.push import Pusher
 from rules import RuleMaker
 import logging
+from common.sparql import SPARQLWrap
+from cubes import CubeMaker
 
 log = logging.getLogger("Main")
 
@@ -55,7 +57,6 @@ def push_raw_rdf_to_virtuoso(config):
         log.info("Push " + named_graph)
         pusher.clean_graph(named_graph)
         pusher.upload_graph(named_graph, data_file)
-        
 
 def generate_harmonization_rules(config):
     '''
@@ -68,7 +69,6 @@ def generate_harmonization_rules(config):
         named_graph = 'urn:graph:cedar:raw-rdf:' + name
         output = config.getPath(RULES_PATH) + '/' + name + '.ttl'
         rulesMaker.process(named_graph, output)
-
 
 def push_harmonization_rules_to_virtuoso(config):
     '''
@@ -90,6 +90,44 @@ def push_harmonization_rules_to_virtuoso(config):
         log.info("Add the content of " + name)
         pusher.upload_graph(named_graph, data_file)
 
+
+def create_harmonized_dataset(config):
+    '''
+    Get a list of dataset to be processed and try to harmonized them into
+    one big cube
+    '''
+    datasets = []
+    sparql = SPARQLWrap(config)
+    query = """
+    select distinct ?ds where {
+    ?ds a qb:DataSet.
+    ?ds tablink:sheetName ?name .
+    ?ds qb:structure ?s .
+    } order by ?ds
+    """
+    results = sparql.run_select(query, None)
+    for result in results:
+        datasets.append(sparql.format(result['ds']))
+    cube = CubeMaker(config)
+    for dataset in datasets:
+        log.info("Process " + dataset)
+        name = dataset.split('/')[-1]
+        cube.process(dataset, 'data/output/release/' + name + '.ttl')
+    log.info("Save additional data")
+    cube.save_data()
+    
+
+def push_release_to_virtuoso(config):
+    pusher = Pusher()
+    named_graph = 'urn:graph:cedar:harmonised_data'
+    pusher.clean_graph(named_graph)
+
+    data_files = glob.glob('data/output/release/*')
+    for data_file in sorted(data_files):
+        log.info("Add the content of " + data_file)
+        pusher.upload_graph(named_graph, data_file)
+
+
 if __name__ == '__main__':
     config = Configuration('config.ini')
 
@@ -103,5 +141,11 @@ if __name__ == '__main__':
     # generate_harmonization_rules(config)
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    push_harmonization_rules_to_virtuoso(config)
+    # push_harmonization_rules_to_virtuoso(config)
+    
+    # Step 5 : get the observations from all the cube and try to harmonize them
+    create_harmonized_dataset(config)
+    
+    # Step 6 : push the harmonized data and all additional files to the release
+    push_release_to_virtuoso(config)
     
