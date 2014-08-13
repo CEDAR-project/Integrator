@@ -3,7 +3,6 @@ from common.configuration import Configuration, RAW_XLS_PATH, MARKING_PATH, \
     RAW_RDF_PATH, RULES_PATH
 import glob
 import os
-import bz2
 from tablink import TabLinker
 from common.push import Pusher
 from rules import RuleMaker
@@ -78,7 +77,7 @@ def push_harmonization_rules_to_virtuoso(config):
 
 def create_harmonized_dataset(config):
     '''
-    Get a list of dataset to be processed and try to harmonized them into
+    Get a list of data set to be processed and try to harmonised them into
     one big cube
     '''
     datasets = []

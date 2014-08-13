@@ -25,7 +25,6 @@ pp = pprint.PrettyPrinter(indent=2)
 # HOTFIX needed
 # - Several sheets from a same file need to be associated to the same source
 # - Do not put the sheet name in the source URI (e.g. no "VT_1947_A1_T_S1-src")
-# - Add prov:Entity type to all observations
 # - Add prov information to say this was generated with tablink
 # - Add schema information with qb terms to better filter observations in cubes
 
@@ -63,19 +62,73 @@ class TabLinker(object):
         """
         Start processing all the sheets in workbook
         """
-        # self.log.info('Starting TabLinker for all sheets in workbook')
+        self.log.info('Starting TabLinker for all sheets in workbook')
+        # keep the starting time (ex "2012-04-15T13:00:00-04:00")
+        startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
+                            datatype=self.conf.getURI('xsd','dateTime'))
 
         # Process all the sheets        
         for n in range(self.wb.nsheets) :
-            # self.log.info('Processing sheet {0}'.format(n))
+            self.log.debug('Processing sheet {0}'.format(n))
             self.parseSheet(n)
     
-        # Save the result
+        # end time for the conversion process
+        endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
+                          datatype=self.conf.getURI('xsd','dateTime'))
+        
+        # Add more data about the source file
+        srcURI = self.conf.getURI('cedar', "{0}-src".format(self.basename, n))
+        self.graph.add((srcURI,
+                        RDF.type,
+                        self.conf.getURI('dcat', 'DataSet')
+                        ))
+        fileUri = BNode()
+        self.graph.add((srcURI,
+                        self.conf.getURI('dcat', 'distribution'),
+                        fileUri
+                        ))
+        self.graph.add((fileUri,
+                        self.conf.getURI('dcterms', 'title'),
+                        Literal(os.path.basename(self.excelFileName))
+                        ))
+        self.graph.add((fileUri,
+                        self.conf.getURI('dcterms', 'accessURL'),
+                        URIRef('file://'+os.path.abspath(self.excelFileName))
+                        ))
+        # The activity is the conversion process
+        activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename, n))
+        self.graph.add((activityURI,
+                        RDF.type,
+                        self.conf.getURI('prov', 'Activity')
+                        ))
+        self.graph.add((activityURI,
+                        self.conf.getURI('prov', 'startedAtTime'),
+                        startTime
+                        ))
+        self.graph.add((activityURI,
+                        self.conf.getURI('prov', 'endedAtTime'),
+                        endTime
+                        ))
+        # Tablinker did it
+        tablinkURI = self.conf.getURI('tablink', "tabLinker")
+        self.graph.add((activityURI,
+                        self.conf.getURI('prov', 'wasAssociatedWith'),
+                        tablinkURI
+                        ))
+        self.graph.add((tablinkURI,
+                        RDF.type,
+                        self.conf.getURI('prov', 'SoftwareAgent')
+                        ))
+        self.graph.add((tablinkURI,
+                        self.conf.getURI('rdfs', 'label'),
+                        Literal("TabLinker")
+                        ))
+        
+        # Save the graph
         self.log.info("Saving {} data triples.".format(len(self.graph)))
         try :
             out = bz2.BZ2File(self.dataFileName + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.dataFileName, "w")
             self.graph.serialize(destination=out, format='n3')
-            # out.writelines(turtle)
             out.close()
         except :
             logging.error("Whoops! Something went wrong in serializing to output file")
@@ -85,7 +138,7 @@ class TabLinker(object):
     def parseSheet(self, n):
         """
         Parses the currently selected sheet in the workbook, takes no arguments. Iterates over all cells in the Excel sheet and produces relevant RDF Triples. 
-        """
+        """        
         sheet = self.wb.sheet_by_index(n)
         colns = number_of_good_cols(sheet)
         rowns = number_of_good_rows(sheet)
@@ -207,7 +260,7 @@ class TabLinker(object):
         order = order + 1
         
         ## The measure
-        node = BNode();
+        node = BNode()
         self.graph.add((dsdURI,
                         self.conf.getURI('qb', 'component'),
                         node
@@ -234,29 +287,19 @@ class TabLinker(object):
                         self.conf.getURI('tablink', 'sheetName'),
                         Literal(sheet.name)
                         ))
-        srcURI = datasetURI + '-src'
+        # all the dataset come from the same file
+        srcURI = self.conf.getURI('cedar', "{0}-src".format(self.basename, n))
         self.graph.add((datasetURI,
                         self.conf.getURI('prov', 'wasDerivedFrom'),
                         srcURI
                         ))
-        self.graph.add((srcURI,
-                        RDF.type,
-                        self.conf.getURI('dcat', 'DataSet')
+        # and are generated by the same activity
+        activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename, n))
+        self.graph.add((datasetURI,
+                        self.conf.getURI('prov', 'wasGeneratedBy'),
+                        activityURI
                         ))
-        fileUri = srcURI + '-file'
-        self.graph.add((srcURI,
-                        self.conf.getURI('dcat', 'distribution'),
-                        fileUri
-                        ))
-        self.graph.add((fileUri,
-                        self.conf.getURI('dcterms', 'title'),
-                        Literal(os.path.basename(self.excelFileName))
-                        ))
-        self.graph.add((fileUri,
-                        self.conf.getURI('dcterms', 'accessURL'),
-                        URIRef('file://'+os.path.abspath(self.excelFileName))
-                        ))
-    
+        
     def handleData(self, cell, columnDimensions, rowDimensions) :
         """
         Create relevant triples for the cell marked as Data
@@ -266,6 +309,9 @@ class TabLinker(object):
         
         # It's an observation
         self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'Observation')))
+        
+        # and an entity we can use in provenance tracking
+        self.graph.add((cell['URI'], RDF.type, self.conf.getURI('prov', 'Entity')))
         
         # It's in the data set defined by the current sheet
         self.graph.add((cell['URI'], self.conf.getURI('qb', 'dataSet'), cell['datasetURI']))
@@ -356,8 +402,7 @@ class TabLinker(object):
             # Add a new dimension to the graph
             self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
             self.graph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'ColumnHeader')))
-            # self.graph.add((cell['URI'], RDF.type, RDF['Property']))
-            # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
             self.graph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
             self.graph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
             # If there is already a parent dimension, connect to it
@@ -384,7 +429,7 @@ class TabLinker(object):
             self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
             self.graph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'RowProperty')))
             # self.graph.add((cell['URI'], RDF.type, RDF['Property']))
-            # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
+            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
             self.graph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
             self.graph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
             dimension = cell['URI']

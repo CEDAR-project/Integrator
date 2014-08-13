@@ -121,8 +121,6 @@ class CubeMaker(object):
         
         # Process observations
         for (observation, description) in observations.iteritems():
-            self.log.info(observation)
-            
             # Get an harmonised observation
             harmonized_po = self._process_observation(rules, description)
             
@@ -193,6 +191,8 @@ if __name__ == '__main__':
     config = Configuration('config.ini')
     
     # Get the name of a data set to test
+    # BRT_1889_05_T4_S0 -> 43 obs
+    # BRT_1889_05_T5_S0 -> 221 obs
     graph = "urn:graph:cedar:raw-rdf:VT_1947_A1_T"
     sparql = SPARQLWrap(config)
     query = """
