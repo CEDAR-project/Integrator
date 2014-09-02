@@ -27,8 +27,8 @@
         </div>
 
         <h2>General numbers</h2>
-        <p>Global count for all the data converted from the Excel files</p>
-        <table class="table table-condensed table-hover">
+        <p class="text-muted">Global count for all the data converted from the Excel files</p>
+        <table class="table table-condensed table-hover table-bordered">
             <thead><tr><th>Description</th><th>Count</th></tr></thead>
             <tbody>
             <tr><td>Number of datasets processed</td><td>{{ nb_datasets }}</td></tr>
@@ -38,7 +38,7 @@
         </table>
         
         <h2>Overview per census type and year</h2>
-        <table class="table table-condensed table-hover">
+        <table class="table table-condensed table-hover ">
             <thead><tr><th>Excel file</th><th>Datasets</th><th>Expected datasets</th><th>Observations</th></tr></thead>
             <tbody>
                 {% for item in nbs_per_src_overview|sort %}
@@ -58,7 +58,7 @@
         
         <h2>Breakdown per Excel file</h2>
         <div class="collapse-group">
-        <p><a data-toggle="collapse" data-target="#viewdetails">View details &raquo;</a></p>
+        <button type="button" class="btn btn-primary" data-toggle="collapse" data-target="#viewdetails">View details &raquo;</button>
         <table id="viewdetails" class="table table-condensed table-hover collapse">
             <thead><tr><th>Excel file</th><th>Datasets</th><th>Expected datasets</th><th>Observations</th></tr></thead>
             <tbody>
@@ -78,26 +78,36 @@
         </table>
         </div>
         
-        <h2>About the observations</h2>
-        <h3>Global break-down</h3>
-        <p>Observations are ignored if they contain a total and are released otherwise. Those which are not explicitly ignored or integrated are left aside</p> 
+        <h2>Details about the observations</h2>
+        <h3>Global break-down of integration</h3>
+        <p class="text-muted">Observations are ignored if they contain a total and are released otherwise. Those which are not explicitly ignored or integrated are left aside</p> 
         <div id="observations-donut"></div>			
+        <h3>Dimensions found</h3>
+        <p class="text-muted">This graph indicates the number of times a value has been mapped to a particular dimension</p> 
+        <div id="dimensions-donut"></div>			
         
 		<!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
 		<!-- Latest compiled and minified JavaScript -->
 		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
-		<!--  Chart -->
+		<!--  Charting libraries -->
 		<script src="http://cdnjs.cloudflare.com/ajax/libs/raphael/2.1.0/raphael-min.js"></script>
 		<script src="http://cdn.oesmith.co.uk/morris-0.5.1.min.js"></script>
 		<script>
-		
 		Morris.Donut({
 			  element: 'observations-donut',
 			  data: [
 			    {label: "Released", value: {{ nb_observations_released }} },
 			    {label: "Ignored", value: {{ nb_observations_ignored }} },
 			    {label: "Left over", value: {{ nb_observations - nb_observations_ignored - nb_observations_released }} }
+			  ]
+			});
+		Morris.Donut({
+			  element: 'dimensions-donut',
+			  data: [
+			    {% for item in nb_occurences|sort %}
+			    {label: '{{ item }}', value: {{ nb_occurences[item] }} },
+				{% endfor %}
 			  ]
 			});
 		</script>

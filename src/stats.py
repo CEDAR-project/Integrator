@@ -51,6 +51,31 @@ class StatsGenerator(object):
         results = self._sparql.run_select(query, self._params)
         output['nb_observations_released'] = int(results[0]['total']['value'])
         
+        # What do we find ?
+        log.info("Count occurences of all the dimensions")
+        output['nb_occurences'] = {}
+        target_dims = {'province' : 'cedar:province',
+                       'city' : 'cedar:city',
+                       'belief' : 'cedar:belief',
+                       'occupation' : 'cedar:occupation',
+                       'occupation position' : 'cedar:occupationPosition',
+                       'marital status' : 'cedar:maritalStatus',
+                       'sex' : 'sdmx-dimension:sex'}
+        for (name,dim) in target_dims.iteritems():
+            query = """
+            SELECT (count(distinct ?obs) as ?total) FROM RAW FROM RULES WHERE {
+            ?obs a qb:Observation.
+            ?obs ?p ?o .
+            ?rule a harmonizer:SetValue.
+            ?rule harmonizer:targetDimension ?p.
+            ?rule harmonizer:targetValue ?o.
+            ?rule harmonizer:dimension DIM.
+            } """.replace('DIM', dim)
+            results = self._sparql.run_select(query, self._params)
+            count = int(results[0]['total']['value'])
+            output['nb_occurences'][name] = count
+        print output['nb_occurences']
+        
     def _get_numbers_raw_rdf(self, output):
         '''
         Get all the figures related to the raw data set
@@ -116,7 +141,7 @@ if __name__ == '__main__':
     
     # Get the numbers or reload them from a stored dump
     data = None
-    # with open('/tmp/stats.json', 'w') as outfile:
+    #with open('/tmp/stats.json', 'w') as outfile:
     #    data = stats.get_numbers()
     #    json.dump(data, outfile)
     if data == None:
