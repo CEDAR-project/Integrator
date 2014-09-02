@@ -9,60 +9,6 @@ import sys
 import logging
 
 RULES_GRAPH = 'urn:graph:cedar:harmonization_rules'
-
-class RulesFetch(object):
-    '''
-    This object fetches and store harmonization rules from the SPARQL end point.
-    It is both used as a convenience class and to boost the harmonization
-    process by caching the rules in memory.
-    '''
-    def __init__(self, configuration):
-        '''
-        Constructor
-        '''
-        self.log = logging.getLogger("RulesFetch")
-        
-        # Keep parameters
-        self.conf = configuration
-        
-        # A wrapper for SPARQL
-        self.sparql = SPARQLWrap(self.conf)
-        
-        # The rules
-        self.rules = {}
-        
-    def get_rules_for(self, target_dim, target_value):
-        params = {'DIM' : target_dim.n3(), 'VAL' : target_value.n3()}
-        key = target_dim.n3() + "_" + target_value.n3()
-        
-        # If we already have the rules return them (could be None)
-        if key in self.rules:
-            return self.rules[key]
-        
-        # Try to fetch some rules
-        query = """
-        select distinct * from <urn:graph:cedar:harmonization_rules> where {
-        ?rule a ?type .
-        ?rule harmonizer:targetDimension DIM .
-        ?rule harmonizer:targetValue VAL .
-        optional {
-            ?rule harmonizer:dimension ?dim .
-            ?rule harmonizer:value ?val .
-        }}
-        """
-        results = self.sparql.run_select(query, params)
-        if len(results) == 0:
-            self.rules[key] = None
-            return None
-        for result in results:
-            rule = {'type': self.sparql.format(result['type'])}
-            if 'dim' in result and 'val' in result:
-                d = self.sparql.format(result['dim'])
-                v = self.sparql.format(result['val'])
-                rule['dv'] = (d,v)
-            self.rules.setdefault(key, [])
-            self.rules[key].append(rule)
-        return self.rules[key]
     
 class CubeMaker(object):
     def __init__(self, configuration):
@@ -96,13 +42,10 @@ class CubeMaker(object):
         graph = ConjunctiveGraph()
         self.conf.bindNamespaces(graph)
 
-        # Create the cache
-        rules = RulesFetch(self.conf)
-        
-        # Get a list of observations
+        # Get a list of observations for this data set
         observations = {}
         query = """
-        select distinct ?obs ?p ?o where {
+        select distinct ?obs ?p ?o from <urn:graph:cedar:raw-rdf> where {
         ?obs a qb:Observation.
         ?obs qb:dataSet <DATASET>.
         ?obs ?p ?o.
@@ -118,6 +61,36 @@ class CubeMaker(object):
                 observations[observation].append((p,o))
         
         self.log.info("Process %d observations" % len(observations))
+        
+        # Get the associated rules
+        rules = {}
+        query = """
+        select distinct * from <urn:graph:cedar:harmonization_rules> where {
+        ?rule a ?type .
+        ?rule harmonizer:targetDimension ?targetdim .
+        ?rule harmonizer:targetValue ?targetval .
+        ?rule harmonizer:targetDataset <DATASET> .
+        optional {
+            ?rule harmonizer:dimension ?dim .
+            ?rule harmonizer:value ?val .
+        }}
+        """
+        results = self.sparql.run_select(query, {'DATASET' : dataset_uri})
+        for result in results:
+            rule = {
+                    'type': self.sparql.format(result['type']),
+                    'target_dim' : self.sparql.format(result['targetdim']),
+                    'target_value' : self.sparql.format(result['targetval'])
+                    }
+            if 'dim' in result and 'val' in result:
+                d = self.sparql.format(result['dim'])
+                v = self.sparql.format(result['val'])
+                rule['dv'] = (d,v)
+            key = rule['target_dim'].n3() + "_" + rule['target_value'].n3()
+            rules.setdefault(key, [])
+            rules[key].append(rule)
+        
+        self.log.info("With %d rules" % len(rules))
         
         # Process observations
         for (observation, description) in observations.iteritems():
@@ -167,19 +140,19 @@ class CubeMaker(object):
                 pop_size_val = o
         if pop_size_val == None:
             return None
-        try:
-            pop_size_val = int(pop_size_val)
-        except ValueError:
-            return None
+        #try:
+        #    pop_size_val = int(pop_size_val.toPython())
+        #except ValueError:
+        #    return None
+        # print type(pop_size_val)
         
         observation.append((self.conf.getURI('cedar', 'population'), Literal(pop_size_val, datatype=XSD.decimal)))
         
         for (dim,value) in description:
             # Get the set of rules matching this observation
-            matching_rules = rules.get_rules_for(dim,value)
-            
-            if matching_rules != None:
-                for rule in matching_rules:
+            key = dim.n3() + "_" + value.n3()
+            if key in rules:
+                for rule in rules[key]:
                     if rule['type'] == self.conf.getURI('harmonizer', 'IgnoreObservation'):
                         return None
                     elif rule['type'] == self.conf.getURI('harmonizer', 'SetValue'):

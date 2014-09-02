@@ -56,12 +56,13 @@ class TabLinker(object):
         """
         Start processing all the sheets in workbook
         """
-        self.log.info('Starting TabLinker for all sheets in workbook')
+        self.log.debug('Starting TabLinker for all sheets in workbook')
         # keep the starting time (ex "2012-04-15T13:00:00-04:00")
         startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
                             datatype=self.conf.getURI('xsd','dateTime'))
 
-        # Process all the sheets        
+        # Process all the sheets
+        self.log.info('Found %d sheets to process' % self.wb.nsheets)
         for n in range(self.wb.nsheets) :
             self.log.debug('Processing sheet {0}'.format(n))
             self.parseSheet(n)
@@ -200,8 +201,6 @@ class TabLinker(object):
         #        uri_sub = self.getColHeaderValueURI(value[:index + 1])
         #        uri_top = self.getColHeaderValueURI(value[:index])
         #        self.graph.add((uri_sub, self.namespaces['tablink']['subColHeaderOf'], uri_top))
-        
-        self.log.info("Done parsing...")
         
         # Write the ontology for tablinker
         self.graph.add((self.conf.getURI('tablink', 'value'), RDF.type, self.conf.getURI('qb', 'MeasureProperty')))

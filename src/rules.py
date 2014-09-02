@@ -43,35 +43,42 @@ class RuleMaker(object):
         results = sparql.query().convert()
         return results["results"]["bindings"]
     
-    def process(self, graph_uri, output_file):
-        self.log.info("Start processing %s" % graph_uri)
+    def process(self, dataset_uri, output_file):
+        self.log.info("Start processing %s" % dataset_uri)
         
         # Initialise the graph
         graph = ConjunctiveGraph()
         self.conf.bindNamespaces(graph)
         
         # Fix the parameters for the SPARQL queries
-        query_params = {'GRAPH' : graph_uri}
+        query_params = {'DATASET' : dataset_uri}
         
         #####
         # Start with the column headers
         #####
         
         # Get a list of all the column headers
+        # TODO fix the ugly hack with the regex
         headers = {}
         query = """
-        select distinct * from <GRAPH> where {
+        select distinct * from <urn:graph:cedar:raw-rdf> where {
         ?header rdfs:label ?label.
         ?header a tablink:ColumnHeader.
+        optional {
         ?header tablink:parentCell ?parent.
         ?parent a tablink:ColumnHeader.
+        }
+        filter regex(?header, "DATASET", "i")
         } """
         results = self.sparql.run_select(query, query_params)
         for result in results:
             resource = URIRef(result['header']['value'])
             headers[resource] = {}
             headers[resource]['label'] = result['label']['value']
-            headers[resource]['parent'] = URIRef(result['parent']['value'])
+            if 'parent' in result:
+                headers[resource]['parent'] = URIRef(result['parent']['value'])
+            else:
+                headers[resource]['parent'] = None
         self.log.info("Process %d column headers" % len(headers))
         
         # Get a sublist of leaves
@@ -86,16 +93,17 @@ class RuleMaker(object):
                 
         # Process all the leaf headers, one by one
         for leaf in leaves:
-            self.process_column_header(graph, headers, leaf)
+            self.process_column_header(graph, dataset_uri, headers, leaf)
             
         #####
         # Move on to the row headers
         #####
         headers = {}
         query = """ 
-        select distinct ?header ?label from <GRAPH> where {
+        select distinct ?header ?label from <urn:graph:cedar:raw-rdf> where {
         ?header a tablink:RowProperty.
         ?header rdfs:label ?label.
+        filter regex(?header, "DATASET", "i")
         } """
         results = self.sparql.run_select(query, query_params)
         for result in results:
@@ -105,7 +113,7 @@ class RuleMaker(object):
         self.log.info("Process %d row properties" % len(headers))
         
         for (header, label) in headers.iteritems():
-            self.process_row_header(graph, query_params, header, label)
+            self.process_row_header(graph, dataset_uri, query_params, header, label)
             
         #####
         # Done
@@ -123,7 +131,7 @@ class RuleMaker(object):
         else:
             self.log.info("Nothing to save !")
             
-    def process_row_header(self, graph, query_params, header, label):
+    def process_row_header(self, graph, dataset_uri, query_params, header, label):
         """
         Process a row header. Get all the possible values and find a possible
         best match
@@ -162,7 +170,7 @@ class RuleMaker(object):
         # if the column contains years it should be a birth year
         if years:
             for label in labels:
-                self.create_rule_set_value(graph, 
+                self.create_rule_set_value(graph, dataset_uri,
                                            header, Literal(label), 
                                            self.conf.getURI('cedar', 'birthYear'), Literal(label))
             return
@@ -203,9 +211,9 @@ class RuleMaker(object):
             v = self.codes.get_code(dimension, label)
             if v != None:
                 d = (dimension, v)
-                self.create_rule_set_value(graph, header, Literal(label), d)
+                self.create_rule_set_value(graph, dataset_uri, header, Literal(label), d)
         
-    def process_column_header(self, graph, headers, header):
+    def process_column_header(self, graph, dataset_uri, headers, header):
         """
         Process a column header
         headers = set of all headers
@@ -224,11 +232,11 @@ class RuleMaker(object):
             for dimension in dimensions:
                 (_, dim) = dimension
                 target_dim = self.conf.getURI('tablink', 'dimension')
-                self.create_rule_set_value(graph, target_dim, header, dim)
+                self.create_rule_set_value(graph, dataset_uri, target_dim, header, dim)
         else:
             # Add a rule to ignore this observation
             target_dim = self.conf.getURI('tablink', 'dimension')
-            self.create_rule_ignore_observation(graph, target_dim, header)
+            self.create_rule_ignore_observation(graph, dataset_uri, target_dim, header)
                 
     
     def detect_dimensions(self, dimensions, headers, header):
@@ -284,7 +292,7 @@ class RuleMaker(object):
         
         return None
         
-    def create_rule_set_value(self, graph, target_dim, target_val, dimensionvalue):
+    def create_rule_set_value(self, graph, dataset_uri, target_dim, target_val, dimensionvalue):
         """
         Create a new harmonization rule that assign a dimension and value
         to all the observations having the targetDimension as a dimension
@@ -301,13 +309,16 @@ class RuleMaker(object):
                    self.conf.getURI('harmonizer', 'targetValue'),
                    target_val))
         graph.add((resource,
+                   self.conf.getURI('harmonizer', 'targetDataset'),
+                   URIRef(dataset_uri)))
+        graph.add((resource,
                    self.conf.getURI('harmonizer', 'dimension'),
                    dimension))
         graph.add((resource,
                    self.conf.getURI('harmonizer', 'value'),
                    value))    
         
-    def create_rule_ignore_observation(self, graph, target_dim, target_val):
+    def create_rule_ignore_observation(self, graph, dataset_uri, target_dim, target_val):
         """
         Create a new harmonization rule that tells to ignore observations
         associated to the target dimension
@@ -322,13 +333,16 @@ class RuleMaker(object):
         graph.add((resource,
                    self.conf.getURI('harmonizer', 'targetValue'),
                    target_val))
+        graph.add((resource,
+                   self.conf.getURI('harmonizer', 'targetDataset'),
+                   URIRef(dataset_uri)))
         
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
     
     # Test
-    graph = "urn:graph:cedar:raw-rdf:VT_1947_A1_T"
+    dataset_name = "http://cedar.example.org/resource/VT_1947_A1_T_S0"
     rulesMaker = RuleMaker(config)
-    rulesMaker.process(graph, '/tmp/rule.ttl')
+    rulesMaker.process(dataset_name, '/tmp/rule.ttl')
     

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 from common.configuration import Configuration, RAW_XLS_PATH, MARKING_PATH, \
     RAW_RDF_PATH, RULES_PATH
 import glob
@@ -11,6 +11,21 @@ from common.sparql import SPARQLWrap
 from cubes import CubeMaker
 
 log = logging.getLogger("Main")
+
+def get_datasets_list(config):
+    datasets = []
+    sparql = SPARQLWrap(config)
+    query = """
+    select distinct ?ds from <urn:graph:cedar:raw-rdf> where {
+    ?ds a qb:DataSet.
+    ?ds tablink:sheetName ?name .
+    ?ds qb:structure ?s .
+    } order by ?ds
+    """
+    results = sparql.run_select(query, None)
+    for result in results:
+        datasets.append(sparql.format(result['ds']))
+    return datasets
 
 def generate_raw_rdf(config):
     '''
@@ -27,85 +42,58 @@ def generate_raw_rdf(config):
         if name in marking_index:
             marking_file = marking_index[name]
             dataFile = config.getPath(RAW_RDF_PATH) + name + '.ttl'
+            dataFileCheck = dataFile
             if config.isCompress():
-                dataFile = dataFile + '.bz2'
-            if not os.path.exists(dataFile):
-                print name
+                dataFileCheck = dataFileCheck + '.bz2'
+            if not os.path.exists(dataFileCheck):
                 try:
+                    log.info("Calling tablinker for %s" % name)
                     tLinker = TabLinker(config, raw_xls_file, marking_file, dataFile)
                     tLinker.doLink()
                 except:
-                    print "Error !"
-
-def push_raw_rdf_to_virtuoso(config):
-    '''
-    Push the raw rdf graphs to virtuoso
-    '''
-    pusher = Pusher()
-    named_graph = 'urn:graph:cedar:raw-rdf'
-    pusher.clean_graph(named_graph)
-    
-    raw_rdf_files = glob.glob(config.getPath(RAW_RDF_PATH) + '/*')
-    for raw_rdf_file in sorted(raw_rdf_files):
-        log.info("Add the content of " + raw_rdf_file)
-        pusher.upload_graph(named_graph, raw_rdf_file)
+                    log.error("Can not process %s" % name)
 
 def generate_harmonization_rules(config):
     '''
     Generate harmonization rules
     '''
     rulesMaker = RuleMaker(config)
-    raw_rdf_files = glob.glob(config.getPath(RAW_RDF_PATH) + '/*')
-    for raw_rdf_file in sorted(raw_rdf_files):
-        name = os.path.basename(raw_rdf_file).split('.')[0]
-        named_graph = 'urn:graph:cedar:raw-rdf:' + name
+    for dataset in get_datasets_list(config):
+        log.info("Process " + dataset.n3())
+        name = dataset.split('/')[-1]
         output = config.getPath(RULES_PATH) + '/' + name + '.ttl'
-        rulesMaker.process(named_graph, output)
-
-def push_harmonization_rules_to_virtuoso(config):
-    '''
-    Push the rules into a named graph
-    '''
-    pusher = Pusher()
-    named_graph = 'urn:graph:cedar:harmonization_rules'
-    pusher.clean_graph(named_graph)
-    
-    rules_files = glob.glob(config.getPath(RULES_PATH) + '/*')
-    for rules_file in sorted(rules_files):
-        log.info("Add the content of " + rules_file)
-        pusher.upload_graph(named_graph, rules_file)
+        rulesMaker.process(dataset, output)
 
 def create_harmonized_dataset(config):
     '''
     Get a list of data set to be processed and try to harmonised them into
     one big cube
     '''
-    datasets = []
-    sparql = SPARQLWrap(config)
-    query = """
-    select distinct ?ds where {
-    ?ds a qb:DataSet.
-    ?ds tablink:sheetName ?name .
-    ?ds qb:structure ?s .
-    } order by ?ds
-    """
-    results = sparql.run_select(query, None)
-    for result in results:
-        datasets.append(sparql.format(result['ds']))
     cube = CubeMaker(config)
-    for dataset in datasets:
-        log.info("Process " + dataset)
+    for dataset in get_datasets_list(config):
         name = dataset.split('/')[-1]
-        cube.process(dataset, 'data/output/release/' + name + '.ttl')
+        data_file = 'data/output/release/' + name + '.ttl'
+        data_file_check = data_file
+        if config.isCompress():
+            data_file_check = data_file_check + '.bz2'
+        if not os.path.exists(data_file_check):
+            try:
+                log.info("Process " + dataset.n3())
+                cube.process(dataset, data_file)
+            except:
+                log.error("Can not process %s" % name)
     log.info("Save additional data")
     cube.save_data()
     
-def push_release_to_virtuoso(config):
+def push_to_virtuoso(config, named_graph, directory):
+    '''
+    Push data to virtuoso
+    '''
     pusher = Pusher()
-    named_graph = 'urn:graph:cedar:harmonised_data'
+    log.info("Clean " + named_graph)
     pusher.clean_graph(named_graph)
 
-    data_files = glob.glob('data/output/release/*')
+    data_files = glob.glob(directory)
     for data_file in sorted(data_files):
         log.info("Add the content of " + data_file)
         pusher.upload_graph(named_graph, data_file)
@@ -118,17 +106,17 @@ if __name__ == '__main__':
     # generate_raw_rdf(config)
     
     # Step 2 : push all the raw rdf to the triple store
-    # push_raw_rdf_to_virtuoso(config)
+    # push_to_virtuoso(config, 'urn:graph:cedar:raw-rdf', config.getPath(RAW_RDF_PATH) + '/*')
     
     # Step 3 : generate harmonisation rules
     # generate_harmonization_rules(config)
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    # push_harmonization_rules_to_virtuoso(config)
+    # push_to_virtuoso(config, 'urn:graph:cedar:harmonization_rules', config.getPath(RULES_PATH) + '/*')
     
     # Step 5 : get the observations from all the cube and try to harmonize them
-    create_harmonized_dataset(config)
+    # create_harmonized_dataset(config)
     
     # Step 6 : push the harmonized data and all additional files to the release
-    push_release_to_virtuoso(config)
+    # push_to_virtuoso(config, 'urn:graph:cedar:harmonised_data', 'data/output/release/*')
     

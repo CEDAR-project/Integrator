@@ -21,7 +21,8 @@ class SPARQLWrap(object):
         if params != None:
             for (k,v) in params.iteritems():
                 query = query.replace(k,v)
-        sparql.setQuery(self.prefixes + query)
+        query = self.prefixes + query
+        sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         sparql.setCredentials('rdfread', 'red_fred')
         results = sparql.query().convert()
