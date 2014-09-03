@@ -14,9 +14,6 @@ from common.util import clean_string
 from common.sparql import SPARQLWrap
 from rdflib.term import Literal
 
-# HOTFIXES needed
-# - Bind the rules to the dataset, use it to generate the name and add a triple
-
 class RuleMaker(object):
     def __init__(self, configuration):
         """
@@ -298,10 +295,16 @@ class RuleMaker(object):
         to all the observations having the targetDimension as a dimension
         """
         (dimension, value) = dimensionvalue
-        resource = self.conf.getURI('rules', str(uuid.uuid1()))
+        resource = self.conf.getURI('cedar', 'rule-'+str(uuid.uuid1()))
         graph.add((resource,
                    RDF.type,
                    self.conf.getURI('harmonizer', 'SetValue')))
+        graph.add((resource,
+                   RDF.type,
+                   self.conf.getURI('harmonizer', 'HarmonizationRule')))
+        graph.add((resource,
+                   RDF.type,
+                   self.conf.getURI('prov', 'Entity')))
         graph.add((resource,
                    self.conf.getURI('harmonizer', 'targetDimension'),
                    target_dim))
@@ -323,10 +326,16 @@ class RuleMaker(object):
         Create a new harmonization rule that tells to ignore observations
         associated to the target dimension
         """
-        resource = self.conf.getURI('rules', str(uuid.uuid1()))
+        resource = self.conf.getURI('cedar', 'rule-'+str(uuid.uuid1()))
         graph.add((resource,
                    RDF.type,
                    self.conf.getURI('harmonizer', 'IgnoreObservation')))
+        graph.add((resource,
+                   RDF.type,
+                   self.conf.getURI('harmonizer', 'HarmonizationRule')))
+        graph.add((resource,
+                   RDF.type,
+                   self.conf.getURI('prov', 'Entity')))
         graph.add((resource,
                    self.conf.getURI('harmonizer', 'targetDimension'),
                    target_dim))
