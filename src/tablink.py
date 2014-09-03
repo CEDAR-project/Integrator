@@ -62,7 +62,7 @@ class TabLinker(object):
                             datatype=self.conf.getURI('xsd','dateTime'))
 
         # Process all the sheets
-        self.log.info('Found %d sheets to process' % self.wb.nsheets)
+        self.log.info(self.basename + ':Found %d sheets to process' % self.wb.nsheets)
         for n in range(self.wb.nsheets) :
             self.log.debug('Processing sheet {0}'.format(n))
             self.parseSheet(n)
@@ -126,7 +126,7 @@ class TabLinker(object):
             self.graph.serialize(destination=out, format='n3')
             out.close()
         except :
-            logging.error("Whoops! Something went wrong in serializing to output file")
+            logging.error(self.basename + "Whoops! Something went wrong in serializing to output file")
             logging.info(sys.exc_info())
             traceback.print_exc(file=sys.stdout)
         
@@ -137,7 +137,7 @@ class TabLinker(object):
         sheet = self.wb.sheet_by_index(n)
         colns = number_of_good_cols(sheet)
         rowns = number_of_good_rows(sheet)
-        self.log.info("Parsing {0} rows and {1} columns in sheet \"{2}\"".format(rowns, colns, sheet.name))
+        self.log.info(self.basename + ":Parsing {0} rows and {1} columns in sheet \"{2}\"".format(rowns, colns, sheet.name))
         
         # Define a datasetURI for the current sheet
         datasetURI = self.conf.getURI('cedar', "{0}_S{1}".format(self.basename, n))

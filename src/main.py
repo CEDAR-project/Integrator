@@ -3,12 +3,13 @@ from common.configuration import Configuration, RAW_XLS_PATH, MARKING_PATH, \
     RAW_RDF_PATH, RULES_PATH
 import glob
 import os
+import logging
 from tablink import TabLinker
 from common.push import Pusher
 from rules import RuleMaker
-import logging
 from common.sparql import SPARQLWrap
 from cubes import CubeMaker
+import multiprocessing
 
 log = logging.getLogger("Main")
 
@@ -27,10 +28,27 @@ def get_datasets_list(config):
         datasets.append(sparql.format(result['ds']))
     return datasets
 
+def tablink_thread(parameters):
+    name = parameters['name']
+    raw_xls_file = parameters['raw_xls_file']
+    marking_file = parameters['marking_file']
+    config = parameters['config']
+    dataFile = parameters['dataFile']
+    try:
+        log.info("Calling tablinker for %s" % name)
+        tLinker = TabLinker(config, raw_xls_file, marking_file, dataFile)
+        tLinker.doLink()
+    except:
+        log.error("Can not process %s" % name)
+    
 def generate_raw_rdf(config):
     '''
     Convert the raw xls files into raw RDF data cubes
     '''
+    # Prepare a task list
+    tasks = []
+    
+    # Go check all the files one by one, push a task if needed
     raw_xls_files = glob.glob(config.getPath(RAW_XLS_PATH))
     marking_files = glob.glob(config.getPath(MARKING_PATH))
     marking_index = {}
@@ -46,13 +64,20 @@ def generate_raw_rdf(config):
             if config.isCompress():
                 dataFileCheck = dataFileCheck + '.bz2'
             if not os.path.exists(dataFileCheck):
-                try:
-                    log.info("Calling tablinker for %s" % name)
-                    tLinker = TabLinker(config, raw_xls_file, marking_file, dataFile)
-                    tLinker.doLink()
-                except:
-                    log.error("Can not process %s" % name)
-
+                task = {'name':name,
+                        'config':config,
+                        'raw_xls_file':raw_xls_file,
+                        'marking_file':marking_file,
+                        'dataFile':dataFile}
+                tasks.append(task)
+    
+    # Call tablinker in parallel
+    pool_size = multiprocessing.cpu_count() * 2
+    pool = multiprocessing.Pool(processes=pool_size)
+    pool.map(tablink_thread, tasks)
+    pool.close()
+    pool.join()
+    
 def generate_harmonization_rules(config):
     '''
     Generate harmonization rules
@@ -103,7 +128,7 @@ if __name__ == '__main__':
     config = Configuration('config.ini')
 
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
-    # generate_raw_rdf(config)
+    generate_raw_rdf(config)
     
     # Step 2 : push all the raw rdf to the triple store
     # push_to_virtuoso(config, 'urn:graph:cedar:raw-rdf', config.getPath(RAW_RDF_PATH) + '/*')
