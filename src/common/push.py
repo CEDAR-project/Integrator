@@ -24,7 +24,7 @@ class Pusher(object):
         try:
             data_file = turle_file
             if turle_file.endswith('.bz2'):
-                data_file = '/tmp/data.ttl'
+                data_file = 'tmp/data.ttl'
                 f = open(data_file, 'wb')
                 f.write(bz2.BZ2File(turle_file).read())
                 f.close()
@@ -63,7 +63,7 @@ class Pusher(object):
         c.close()
         
 if __name__ == '__main__':
-    data = "/tmp/data.ttl.gz"
+    data = "tmp/data.ttl.gz"
     graph = "urn:graph:update:test:putgz"
     pusher = Pusher()
     pusher.clean_graph(graph)
