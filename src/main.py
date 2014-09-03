@@ -28,19 +28,6 @@ def get_datasets_list(config):
         datasets.append(sparql.format(result['ds']))
     return datasets
 
-def tablink_thread(parameters):
-    name = parameters['name']
-    raw_xls_file = parameters['raw_xls_file']
-    marking_file = parameters['marking_file']
-    config = parameters['config']
-    dataFile = parameters['dataFile']
-    try:
-        log.info("Calling tablinker for %s" % name)
-        tLinker = TabLinker(config, raw_xls_file, marking_file, dataFile)
-        tLinker.doLink()
-    except:
-        log.error("Can not process %s" % name)
-    
 def generate_raw_rdf(config):
     '''
     Convert the raw xls files into raw RDF data cubes
@@ -74,26 +61,56 @@ def generate_raw_rdf(config):
     # Call tablinker in parallel
     pool_size = multiprocessing.cpu_count() * 2
     pool = multiprocessing.Pool(processes=pool_size)
-    pool.map(tablink_thread, tasks)
+    pool.map(generate_raw_rdf_thread, tasks)
     pool.close()
     pool.join()
+    
+def generate_raw_rdf_thread(parameters):
+    name = parameters['name']
+    raw_xls_file = parameters['raw_xls_file']
+    marking_file = parameters['marking_file']
+    config = parameters['config']
+    dataFile = parameters['dataFile']
+    try:
+        log.info("Calling tablinker for %s" % name)
+        tLinker = TabLinker(config, raw_xls_file, marking_file, dataFile)
+        tLinker.doLink()
+    except:
+        log.error("Can not process %s" % name)
     
 def generate_harmonization_rules(config):
     '''
     Generate harmonization rules
     '''
-    rulesMaker = RuleMaker(config)
+    # Prepare a task list
+    tasks = []
+    
+    # Prepare to process each data set
     for dataset in get_datasets_list(config):
-        log.info("Process " + dataset.n3())
         name = dataset.split('/')[-1]
         output = config.getPath(RULES_PATH) + '/' + name + '.ttl'
-        rulesMaker.process(dataset, output)
-
+        task = {'dataset' : dataset, 'output' : output}
+        tasks.append(task)
+    
+    # Call rules maker in parallel, avoid hammering the store too much
+    pool = multiprocessing.Pool(processes=4)
+    pool.map(generate_harmonization_rules_thread, tasks)
+    pool.close()
+    pool.join()
+    
+def generate_harmonization_rules_thread(parameters):
+    dataset = parameters['dataset']
+    output = parameters['output']
+    log.info("Process " + dataset.n3())
+    rulesMaker = RuleMaker(config)
+    rulesMaker.process(dataset, output)
+        
 def create_harmonized_dataset(config):
     '''
     Get a list of data set to be processed and try to harmonised them into
     one big cube
     '''
+    # !!!! Not thread safe yet
     cube = CubeMaker(config)
     for dataset in get_datasets_list(config):
         name = dataset.split('/')[-1]
@@ -108,7 +125,7 @@ def create_harmonized_dataset(config):
             except:
                 log.error("Can not process %s" % name)
     log.info("Save additional data")
-    cube.save_data()
+    cube.save_data('data/output/release/extra.ttl')
     
 def push_to_virtuoso(config, named_graph, directory):
     '''
@@ -128,7 +145,7 @@ if __name__ == '__main__':
     config = Configuration('config.ini')
 
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
-    generate_raw_rdf(config)
+    # generate_raw_rdf(config)
     
     # Step 2 : push all the raw rdf to the triple store
     # push_to_virtuoso(config, 'urn:graph:cedar:raw-rdf', config.getPath(RAW_RDF_PATH) + '/*')
