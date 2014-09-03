@@ -67,7 +67,8 @@ h5:before {
 			<p class="lead">This page documents the output of the integration
 				process</p>
 		</div>
-
+		<div class="row">
+		<div class="col-md-12">
 		<h2>General numbers</h2>
 		<p class="text-muted">Global count for all the data converted from
 			the Excel files</p>
@@ -93,7 +94,11 @@ h5:before {
 				</tr>
 			</tbody>
 		</table>
+		</div>
+		</div>
 
+		<div class="row">
+		<div class="col-md-12">
 		<h2>Overview per census type and year</h2>
 		<table class="table table-condensed table-hover ">
 			<thead>
@@ -319,7 +324,11 @@ h5:before {
 				
 			</tbody>
 		</table>
+		</div>
+		</div>
 
+		<div class="row">
+		<div class="col-md-12">
 		<div class="collapse-group">
 			<button type="button" class="btn btn-primary" data-toggle="collapse"
 				data-target="#viewdetails">View breakdown per Excel file
@@ -4103,7 +4112,11 @@ h5:before {
 				</table>
 			</span>
 		</div>
+		</div>
+		</div>
 
+		<div class="row">
+		<div class="col-md-12">
 		<h2>Details about the observations</h2>
 		<p class="text-muted">An observation is a data point of the census
 			corresponding to a particular group of individuals. This group
@@ -4112,12 +4125,88 @@ h5:before {
 		<p class="text-muted">Observations are ignored if they contain a
 			total and are released otherwise. Those which are not explicitly
 			ignored or released are left aside</p>
-		<div id="observations-donut"></div>
+		</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<table class="table table-hover table-bordered">
+					<thead>
+						<tr>
+							<th>Status</th>
+							<th>Count</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr><td>Released</td><td>1856378</td></tr>
+						<tr><td>Ignored</td><td>561235</td></tr>
+						<tr><td>Left over</td><td>29502</td></tr>
+					</tbody>
+				</table>
+			</div>
+			<div class="col-md-6">
+				<div id="observations-donut"></div>
+			</div>
+		</div>
+		<div class="row">
+		<div class="col-md-12">
 		<h3>Dimensions found</h3>
 		<p class="text-muted">This graph indicates the number of times a
 			value has been mapped to a particular dimension</p>
-		<div id="dimensions-donut"></div>
-
+		</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<table class="table table-bordered table-hover">
+					<thead>
+						<tr>
+							<th>Dimension</th>
+							<th>Occurences</th>
+						</tr>
+					</thead>
+					<tbody>
+					    
+						<tr>
+							<td>belief</td>
+							<td>224742</td>
+						</tr>
+						
+						<tr>
+							<td>city</td>
+							<td>17976</td>
+						</tr>
+						
+						<tr>
+							<td>marital status</td>
+							<td>364294</td>
+						</tr>
+						
+						<tr>
+							<td>occupation</td>
+							<td>165953</td>
+						</tr>
+						
+						<tr>
+							<td>occupation position</td>
+							<td>43378</td>
+						</tr>
+						
+						<tr>
+							<td>province</td>
+							<td>1932</td>
+						</tr>
+						
+						<tr>
+							<td>sex</td>
+							<td>1433741</td>
+						</tr>
+						
+					</tbody>
+				</table>
+			</div>
+			<div class="col-md-6">
+				<div id="dimensions-donut"></div>
+			</div>
+		</div>
 		<!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
 		<script
 			src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
