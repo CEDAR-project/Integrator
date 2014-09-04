@@ -37,3 +37,17 @@ SELECT distinct ?location (Count(distinct ?d) AS ?total) FROM <urn:graph:cedar:r
 ?src dcat:distribution ?file.
 ?file dcterms:accessURL ?location.
 } group by ?location
+
+# Get number of datasets per source
+prefix qb: <http://purl.org/linked-data/cube#>
+prefix prov: <http://www.w3.org/ns/prov#>
+prefix dcat: <http://www.w3.org/ns/dcat#>
+prefix dcterms: <http://purl.org/dc/terms/>
+SELECT distinct ?title (Count(distinct ?d) AS ?total) FROM <urn:graph:cedar:raw-rdf> WHERE {
+	?d a qb:DataSet.
+	?d prov:wasDerivedFrom ?src.
+	?src a dcat:DataSet.
+	?src dcat:distribution [ dcterms:title ?title ].
+} group by ?title order by ?title
+
+

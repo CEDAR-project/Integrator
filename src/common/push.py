@@ -1,9 +1,15 @@
 import pycurl
 import bz2
 import os
+import sys
+import traceback
+import requests
 
 SPARQL = "http://lod.cedar-project.nl:8080/sparql"
 SERVER = "http://lod.cedar-project.nl:8080/sparql-graph-crud"
+
+# Working POST
+# curl --digest --user "dba:naps48*mimed" --verbose --url "http://lod.cedar-project.nl:8080/sparql-graph-crud?graph-uri=urn:graph:update:test:put" -X POST -T /tmp/data.ttl 
 
 class Pusher(object):
     def __init__(self):
@@ -20,7 +26,7 @@ class Pusher(object):
         c.perform()
         c.close()
     
-    def upload_graph(self, uri, turle_file):
+    def upload_graph_small(self, uri, turle_file):
         try:
             data_file = turle_file
             if turle_file.endswith('.bz2'):
@@ -37,12 +43,62 @@ class Pusher(object):
             c.setopt(c.HTTPPOST, values)
             header = [ 'Content-Type:multipart/form-data', 'Expect: ']
             c.setopt(c.HTTPHEADER, header);
-            c.setopt(pycurl.WRITEFUNCTION, lambda x: None)
+            #c.setopt(pycurl.WRITEFUNCTION, lambda x: None)
+            c.setopt(c.VERBOSE, True)
             c.perform()
+            print c.getinfo(pycurl.HTTP_CODE), c.getinfo(pycurl.EFFECTIVE_URL)
             c.close()
         except:
-            pass
+            traceback.print_exc(file=sys.stdout)
 
+    def upload_graph(self, uri, turle_file):
+        try:
+            data_file = turle_file
+            if turle_file.endswith('.bz2'):
+                data_file = '/tmp/data.ttl'
+                f = open(data_file, 'wb')
+                f.write(bz2.BZ2File(turle_file).read())
+                f.close()
+             
+            user = self.user.split(':')[0]
+            pas = self.user.split(':')[1]
+            r = requests.post(SERVER + "?graph-uri=" + uri,
+                              auth=(user,pas), data=file(data_file,'rb').read())
+            print r.status_code
+        except:
+            traceback.print_exc(file=sys.stdout)
+            
+    def upload_graph_beta(self, uri, turle_file):
+        try:
+            data_file = turle_file
+            if turle_file.endswith('.bz2'):
+                data_file = 'tmp/data.ttl'
+                f = open(data_file, 'wb')
+                f.write(bz2.BZ2File(turle_file).read())
+                f.close()
+                
+            # Upload the new data    
+            c = pycurl.Curl()
+            c.setopt(c.VERBOSE, 1)
+            c.setopt(c.URL, SERVER + "?graph-uri=" + uri)
+            header = [ 'Content-Type:text/turtle']
+            c.setopt(c.USERPWD, self.user)
+            #c.setopt(c.POST, 1)
+            c.setopt(c.UPLOAD, 1)
+            c.setopt(c.HTTPPOST, [("file", (pycurl.FORM_FILE, data_file))])
+            header = [ 'Content-Type:multipart/form-data', 'Expect: ']
+            c.setopt(c.HTTPHEADER, header);
+            #c.setopt(pycurl.WRITEFUNCTION, lambda x: None)
+            filesize = os.path.getsize(data_file)
+            c.setopt(c.POSTFIELDSIZE, filesize)
+            fin = open(data_file, 'rb')
+            c.setopt(c.READFUNCTION, fin.read)
+            c.perform()
+            print c.getinfo(pycurl.HTTP_CODE), c.getinfo(pycurl.EFFECTIVE_URL)
+            c.close()
+        except:
+            traceback.print_exc(file=sys.stdout)
+            
     def upload_graph2(self, uri, turle_file):            
         # Upload the new data    
         c = pycurl.Curl()
@@ -50,7 +106,7 @@ class Pusher(object):
         c.setopt(c.URL, SERVER + "?graph-uri=" + uri)
         c.setopt(c.USERPWD, self.user)
         c.setopt(c.POST, 1)
-        c.setopt(c.UPLOAD, 1)
+        #c.setopt(c.UPLOAD, 1)
         #header = [ 'Content-Type:multipart/form-data', 'Expect: ']
         header = [ 'Content-Type:text/turtle', 'Content-Encoding:gzip']
         c.setopt(c.HTTPHEADER, header);
@@ -63,11 +119,11 @@ class Pusher(object):
         c.close()
         
 if __name__ == '__main__':
-    data = "tmp/data.ttl.gz"
-    graph = "urn:graph:update:test:putgz"
+    data = "/tmp/data.ttl.bck"
+    graph = "urn:graph:update:test:put"
     pusher = Pusher()
-    pusher.clean_graph(graph)
-    pusher.upload_graph2(graph, data)
+    #pusher.clean_graph(graph)
+    pusher.upload_graph(graph, data)
 
 
 # Push to OWLIM

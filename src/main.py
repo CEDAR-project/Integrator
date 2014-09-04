@@ -133,12 +133,13 @@ def push_to_virtuoso(config, named_graph, directory):
     '''
     pusher = Pusher()
     log.info("Clean " + named_graph)
-    pusher.clean_graph(named_graph)
+    #pusher.clean_graph(named_graph)
 
     data_files = glob.glob(directory)
     for data_file in sorted(data_files):
-        log.info("Add the content of " + data_file)
-        pusher.upload_graph(named_graph, data_file)
+	print data_file
+        #log.info("Add the content of " + data_file)
+        #pusher.upload_graph(named_graph, data_file)
 
 
 if __name__ == '__main__':
@@ -148,7 +149,7 @@ if __name__ == '__main__':
     # generate_raw_rdf(config)
     
     # Step 2 : push all the raw rdf to the triple store
-    # push_to_virtuoso(config, 'urn:graph:cedar:raw-rdf', config.getPath(RAW_RDF_PATH) + '/*')
+    push_to_virtuoso(config, 'urn:graph:cedar:raw-rdf', config.getPath(RAW_RDF_PATH) + '/*')
     
     # Step 3 : generate harmonisation rules
     # generate_harmonization_rules(config)

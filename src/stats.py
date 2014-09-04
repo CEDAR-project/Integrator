@@ -86,17 +86,16 @@ class StatsGenerator(object):
         log.info("Count datasets per source")
         output['nb_datasets'] = 0
         query = """
-        SELECT distinct ?location (Count(distinct ?d) AS ?total) FROM RAW WHERE {
+        SELECT distinct ?title (Count(distinct ?d) AS ?total) FROM RAW WHERE {
         ?d a qb:DataSet.
         ?d prov:wasDerivedFrom ?src.
         ?src a dcat:DataSet.
-        ?src dcat:distribution ?file.
-        ?file dcterms:accessURL ?location.
-        } group by ?location
+        ?src dcat:distribution [ dcterms:title ?title ].
+        } group by ?title order by ?title
         """
         results = self._sparql.run_select(query, self._params)
         for result in results:
-            src = result['location']['value'].split('/')[-1].split('.')[0]
+            src = result['title']['value'].split('.')[0]
             count = int(result['total']['value'])
             output['nbs_per_src'].setdefault(src, {})
             output['nbs_per_src'][src]['datasets'] = count
@@ -117,19 +116,18 @@ class StatsGenerator(object):
         log.info("Count the number of observations per source")
         output['nb_observations'] = 0
         query = """
-        SELECT distinct ?location (Count(distinct ?obs) AS ?total) FROM RAW WHERE {
+        SELECT distinct ?title (Count(distinct ?obs) AS ?total) FROM RAW WHERE {
         ?obs a qb:Observation.
         ?obs qb:dataSet ?d.
         ?d a qb:DataSet.
         ?d prov:wasDerivedFrom ?src.
         ?src a dcat:DataSet.
-        ?src dcat:distribution ?file.
-        ?file dcterms:accessURL ?location.
-        } group by ?location
+        ?src dcat:distribution [ dcterms:title ?title ].
+        } group by ?title order by ?title
         """
         results = self._sparql.run_select(query, self._params)
         for result in results:
-            src = result['location']['value'].split('/')[-1].split('.')[0]
+            src = result['title']['value'].split('.')[0]
             count = int(result['total']['value'])
             output['nbs_per_src'].setdefault(src, {})
             output['nbs_per_src'][src]['observations'] = count
@@ -141,9 +139,9 @@ if __name__ == '__main__':
     
     # Get the numbers or reload them from a stored dump
     data = None
-    #with open('/tmp/stats.json', 'w') as outfile:
-    #    data = stats.get_numbers()
-    #    json.dump(data, outfile)
+    with open('/tmp/stats.json', 'w') as outfile:
+        data = stats.get_numbers()
+        json.dump(data, outfile)
     if data == None:
         with open('/tmp/stats.json', 'r') as infile:
             data = json.load(infile)
