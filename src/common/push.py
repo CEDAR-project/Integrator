@@ -17,13 +17,19 @@ class Pusher(object):
         
     def clean_graph(self, uri):
         # Clear the previous graph
+        # http://virtuoso.openlinksw.com/dataspace/doc/dav/wiki/Main/VirtTipsAndTricksGuideDeleteLargeGraphs
         c = pycurl.Curl()
-        values = [("query", "CLEAR GRAPH <%s>" % uri)]
+        query = """
+        DEFINE sql:log-enable 3 
+        CLEAR GRAPH <%s>
+        """ % uri
+        values = [("query", query)]
         c.setopt(c.URL, SPARQL)
         c.setopt(c.USERPWD, self.user)
         c.setopt(c.HTTPPOST, values)
         c.setopt(pycurl.WRITEFUNCTION, lambda x: None)
         c.perform()
+        print c.getinfo(pycurl.HTTP_CODE), c.getinfo(pycurl.EFFECTIVE_URL)
         c.close()
     
     def upload_graph_small(self, uri, turle_file):
@@ -122,7 +128,7 @@ if __name__ == '__main__':
     data = "/tmp/data.ttl.bck"
     graph = "urn:graph:update:test:put"
     pusher = Pusher()
-    #pusher.clean_graph(graph)
+    pusher.clean_graph(graph)
     pusher.upload_graph(graph, data)
 
 
