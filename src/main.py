@@ -133,13 +133,8 @@ def push_to_virtuoso(config, named_graph, directory):
     '''
     pusher = Pusher()
     log.info("Clean " + named_graph)
-    #pusher.clean_graph(named_graph)
-
-    data_files = glob.glob(directory)
-    for data_file in sorted(data_files):
-	print data_file
-        #log.info("Add the content of " + data_file)
-        #pusher.upload_graph(named_graph, data_file)
+    pusher.clean_graph(named_graph)
+    pusher.upload_directory(named_graph, directory)
 
 
 if __name__ == '__main__':
@@ -152,14 +147,14 @@ if __name__ == '__main__':
     push_to_virtuoso(config, 'urn:graph:cedar:raw-rdf', config.getPath(RAW_RDF_PATH) + '/*')
     
     # Step 3 : generate harmonisation rules
-    # generate_harmonization_rules(config)
+    generate_harmonization_rules(config)
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    # push_to_virtuoso(config, 'urn:graph:cedar:harmonization_rules', config.getPath(RULES_PATH) + '/*')
+    push_to_virtuoso(config, 'urn:graph:cedar:harmonization_rules', config.getPath(RULES_PATH) + '/*')
     
     # Step 5 : get the observations from all the cube and try to harmonize them
-    # create_harmonized_dataset(config)
+    create_harmonized_dataset(config)
     
     # Step 6 : push the harmonized data and all additional files to the release
-    # push_to_virtuoso(config, 'urn:graph:cedar:harmonised_data', 'data/output/release/*')
+    push_to_virtuoso(config, 'urn:graph:cedar:harmonised_data', 'data/output/release/*')
     
