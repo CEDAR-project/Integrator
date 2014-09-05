@@ -47,48 +47,49 @@ class Pusher(object):
             traceback.print_exc(file=sys.stdout)
         
     def upload_directory(self, graph_uri, directory):
-        # First remove the last BUFFER
-        if os.path.isfile(BUFFER):
-            os.unlink(BUFFER)
-        
-        # Concatenate all the source input to the BUFFER
-        for input_file in glob.glob(directory):
+        for input_file in sorted(glob.glob(directory)):
+            # First remove the last BUFFER        
+            if os.path.isfile(BUFFER):
+                os.unlink(BUFFER)
+            
             if input_file.endswith('.bz2'):
                 f = open(BUFFER + '-part', 'wb')
                 f.write(bz2.BZ2File(input_file).read())
                 f.close()
                 subprocess.call(["rapper", "-i guess -o ntriples " + BUFFER + '-part >> ' + BUFFER], stdout=sys.stdout) 
             else:
-                subprocess.call("rapper -i guess -o ntriples " + input_file + ' >> ' + BUFFER, stderr=sys.stdout, shell=True) 
+                subprocess.call("rapper -i guess -o ntriples " + input_file + ' > ' + BUFFER, stderr=sys.stdout, shell=True) 
             
-        # Load all the data
-        input_file = open(BUFFER, 'rb')
-        count = 0
-        query = """
-        DEFINE sql:log-enable 3 
-        INSERT INTO <%s> {
-        """ % graph_uri
-        for triple in input_file.readlines():
-            query = query + triple
-            count = count + 1
-            
-            if count == MAX_NT:
-                # Finish and send the query
-                query = query + "}"
-                r = requests.post(SPARQL, auth=(self.user,self.pas), data={'query' : query})
-                print r.status_code
+            # Load all the data
+            input_file = open(BUFFER, 'rb')
+            count = 0
+            query = """
+            DEFINE sql:log-enable 3 
+            INSERT INTO <%s> {
+            """ % graph_uri
+            for triple in input_file.readlines():
+                query = query + triple
+                count = count + 1
                 
-                # Restart
-                count = 0
-                query = """
-                DEFINE sql:log-enable 3 
-                INSERT INTO <%s> {
-                """ % graph_uri
-
-        # Send whatever is left over
-        query = query + "}"
-        r = requests.post(SPARQL, auth=(self.user,self.pas), data={'query' : query})
-        print r.status_code
+                if count == MAX_NT:
+                    # Finish and send the query
+                    query = query + "}"
+                    r = requests.post(SPARQL, auth=(self.user,self.pas), data={'query' : query})
+                    print r.status_code
+                    
+                    # Restart
+                    count = 0
+                    query = """
+                    DEFINE sql:log-enable 3 
+                    INSERT INTO <%s> {
+                    """ % graph_uri
+    
+            # Send whatever is left over
+            query = query + "}"
+            r = requests.post(SPARQL, auth=(self.user,self.pas), data={'query' : query})
+            print r.status_code
+            
+            input_file.close()
             
 if __name__ == '__main__':
     graph = "urn:graph:update:test:put"
