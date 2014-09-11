@@ -10,7 +10,7 @@ import subprocess
 SPARQL = "http://lod.cedar-project.nl:8080/sparql"
 SERVER = "http://lod.cedar-project.nl:8080/sparql-graph-crud"
 BUFFER = "data/tmp/buffer.nt"
-MAX_NT = 240000
+MAX_NT = 1000 # hard max apparently for Virtuoso
 
 # Working POST
 # curl --digest --user "dba:naps48*mimed" --verbose --url "http://lod.cedar-project.nl:8080/sparql-graph-crud?graph-uri=urn:graph:update:test:put" -X POST -T /tmp/data.ttl 
@@ -56,7 +56,7 @@ class Pusher(object):
                 f = open(BUFFER + '-part', 'wb')
                 f.write(bz2.BZ2File(input_file).read())
                 f.close()
-                subprocess.call(["rapper", "-i guess -o ntriples " + BUFFER + '-part >> ' + BUFFER], stdout=sys.stdout) 
+                subprocess.call("rapper", "-i guess -o ntriples " + BUFFER + '-part > ' + BUFFER, stdout=sys.stdout, shell=True) 
             else:
                 subprocess.call("rapper -i guess -o ntriples " + input_file + ' > ' + BUFFER, stderr=sys.stdout, shell=True) 
             
