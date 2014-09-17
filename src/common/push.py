@@ -56,7 +56,7 @@ class Pusher(object):
                 f = open(BUFFER + '-part', 'wb')
                 f.write(bz2.BZ2File(input_file).read())
                 f.close()
-                subprocess.call("rapper", "-i guess -o ntriples " + BUFFER + '-part > ' + BUFFER, stdout=sys.stdout, shell=True) 
+                subprocess.call("rapper -i guess -o ntriples " + BUFFER + '-part > ' + BUFFER, stdout=sys.stdout, shell=True) 
             else:
                 subprocess.call("rapper -i guess -o ntriples " + input_file + ' > ' + BUFFER, stderr=sys.stdout, shell=True) 
             

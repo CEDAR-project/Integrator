@@ -52,24 +52,30 @@ class StatsGenerator(object):
         output['nb_observations_released'] = int(results[0]['total']['value'])
         
         # What do we find ?
+        log.info("Get a list of dimensions")
+        target_dims = {}
+        query = """
+        select distinct ?dim from RELEASE where {
+            ?d a qb:DataSet.
+            ?d qb:structure ?dsd.
+            ?dsd a qb:DataStructureDefinition.
+            ?dsd qb:component [ qb:dimension ?dim ].
+        }"""
+        results = self._sparql.run_select(query, self._params)
+        for dim_entry in results:
+            dim = dim_entry['dim']['value']
+            # hack to get a label
+            label = dim.split('/')[-1]
+            if dim.find('#') != -1:
+                label = dim.split('#')[-1]
+            target_dims[label] = dim
         log.info("Count occurences of all the dimensions")
         output['nb_occurences'] = {}
-        target_dims = {'province' : 'cedar:province',
-                       'city' : 'cedar:city',
-                       'belief' : 'cedar:belief',
-                       'occupation' : 'cedar:occupation',
-                       'occupation position' : 'cedar:occupationPosition',
-                       'marital status' : 'cedar:maritalStatus',
-                       'sex' : 'sdmx-dimension:sex'}
-        for (name,dim) in target_dims.iteritems():
+        for (name, dim) in target_dims.iteritems():
             query = """
-            SELECT (count(distinct ?obs) as ?total) FROM RAW FROM RULES WHERE {
+            SELECT (count(distinct ?obs) as ?total) FROM RELEASE WHERE {
             ?obs a qb:Observation.
-            ?obs ?p ?o .
-            ?rule a harmonizer:SetValue.
-            ?rule harmonizer:targetDimension ?p.
-            ?rule harmonizer:targetValue ?o.
-            ?rule harmonizer:dimension DIM.
+            ?obs <DIM> [] .
             } """.replace('DIM', dim)
             results = self._sparql.run_select(query, self._params)
             count = int(results[0]['total']['value'])
@@ -157,8 +163,13 @@ if __name__ == '__main__':
             data['nbs_per_src_overview'][key]['datasets_expected'] += v['datasets_expected']
         if 'observations' in v:
             data['nbs_per_src_overview'][key]['observations'] += v['observations']
-    print data['nbs_per_src_overview']
     
+    # Do some math
+    data['nb_observations_leftover'] = data['nb_observations'] - data['nb_observations_ignored'] - data['nb_observations_released']
+    
+    with open('/tmp/stats.json', 'w') as outfile:
+        json.dump(data, outfile)
+        
     # Process the template
     template = Template(open('src/stats.html', 'r').read())
     output = template.render(data)
