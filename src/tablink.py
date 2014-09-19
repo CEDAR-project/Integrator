@@ -22,6 +22,12 @@ sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
 pp = pprint.PrettyPrinter(indent=2)
 
+# TODO: Write all the hierarchial dimensions otherwise the harminozation with SPARQL does not work
+# TODO: Remove tabink predicates
+# TODO: Rename into TabLink
+# TODO: Fork to try a simpler non-QB based export which describes all the cells
+# TODO: Add a differenciation between header value and header type
+
 class TabLinker(object):
     def __init__(self, conf, excelFileName, markingFileName, dataFileName, processAnnotations = False):
         """

@@ -13,6 +13,8 @@ import multiprocessing
 
 log = logging.getLogger("Main")
 
+# TODO: Remove paths from config.ini and move them here
+
 def get_datasets_list(config):
     datasets = []
     sparql = SPARQLWrap(config)

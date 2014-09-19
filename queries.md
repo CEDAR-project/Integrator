@@ -51,3 +51,22 @@ SELECT distinct ?title (Count(distinct ?d) AS ?total) FROM <urn:graph:cedar:raw-
 } group by ?title order by ?title
 
 
+# Apply rule
+prefix harmonizer: <http://bit.ly/cedar-harmonizer#>
+prefix qb: <http://purl.org/linked-data/cube#>
+
+construct {
+?obs a qb:Observation.
+?obs qb:dataSet <http://lod.cedar-project.nl:8888/cedar/resource/BRT_1930_07_S3_S0>.
+?obs ?dim ?val.
+} where {
+?obs ?rawdim ?rawval.
+?rule a harmonizer:SetValue .
+?rule harmonizer:targetDimension ?rawdim .
+?rule harmonizer:targetValue ?rawval .
+?rule harmonizer:targetDataset <http://lod.cedar-project.nl:8888/cedar/resource/BRT_1930_07_S3_S0>.
+?rule harmonizer:dimension ?dim .
+?rule harmonizer:value ?val .
+}
+
+

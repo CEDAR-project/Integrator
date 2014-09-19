@@ -10,6 +10,10 @@ import logging
 
 log = logging.getLogger("Stats")
 
+# TODO: How many rules per dataset ?
+# TODO: Export all the queries outside of the main code 
+# TODO: Move the queries to the visualisation frontend - copy provoviz.org to make the user wait
+
 class StatsGenerator(object):
     
     def __init__(self, config):
@@ -79,6 +83,17 @@ class StatsGenerator(object):
             } """.replace('DIM', dim)
             results = self._sparql.run_select(query, self._params)
             count = int(results[0]['total']['value'])
+            if count == 0:
+                # Try if the dimension is attached to a slice
+                query = """
+                SELECT (count(distinct ?obs) as ?total) FROM RELEASE WHERE {
+                ?obs a qb:Observation.
+                ?slice a qb:Slice.
+                ?slice qb:observation ?obs.
+                ?slice <DIM> [].
+                } """.replace('DIM', dim)
+                results = self._sparql.run_select(query, self._params)
+                count = int(results[0]['total']['value'])
             output['nb_occurences'][name] = count
         print output['nb_occurences']
         

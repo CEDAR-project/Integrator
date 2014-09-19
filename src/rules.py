@@ -14,6 +14,14 @@ from common.util import clean_string
 from common.sparql import SPARQLWrap
 from rdflib.term import Literal
 
+# TODO: Put "Ignore" as a specific dimension for the harmonized point
+# TODO: Use SPARQL Construct to apply the rules
+# TOOD: Remove all the BNodes
+# TODO: Fix finding "totaal" in the example
+# TODO: When writing as OA, put the dim/val directly as part of the body of the rule
+# TODO: Remove the link rule->dataset
+# TODO: Use cell as a basename for the rule instead of the UUID
+
 class RuleMaker(object):
     def __init__(self, configuration):
         """
@@ -351,7 +359,8 @@ if __name__ == '__main__':
     config = Configuration('config.ini')
     
     # Test
-    dataset_name = "http://cedar.example.org/resource/VT_1947_A1_T_S0"
+    # dataset_name = "http://cedar.example.org/resource/VT_1947_A1_T_S0"
+    dataset_name = "http://lod.cedar-project.nl:8888/cedar/resource/BRT_1930_07_S3_S0"
     rulesMaker = RuleMaker(config)
     rulesMaker.process(dataset_name, '/tmp/rule.ttl')
     

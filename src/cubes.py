@@ -10,7 +10,10 @@ import logging
 from rdflib.term import BNode, URIRef
 
 RULES_GRAPH = 'urn:graph:cedar:harmonization_rules'
-    
+
+# TODO: If the value is not an int mark the point as being ignored
+# TODO: When getting the RDF model from the construct, look for dimensions used
+
 class CubeMaker(object):
     def __init__(self, configuration):
         """
