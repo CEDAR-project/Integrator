@@ -6,7 +6,7 @@ Code derived from TabLinker
 """
 from xlutils.margins import number_of_good_cols, number_of_good_rows
 from xlrd import open_workbook, XL_CELL_EMPTY, XL_CELL_BLANK, cellname
-from rdflib import ConjunctiveGraph, Literal, RDF, BNode, URIRef, RDFS
+from rdflib import ConjunctiveGraph, Literal, RDF, URIRef
 import re
 import logging
 import datetime
@@ -22,13 +22,7 @@ sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
 pp = pprint.PrettyPrinter(indent=2)
 
-# TODO: Write all the hierarchial dimensions otherwise the harminozation with SPARQL does not work
-# TODO: Remove tabink predicates
-# TODO: Rename into TabLink
-# TODO: Fork to try a simpler non-QB based export which describes all the cells
-# TODO: Add a differenciation between header value and header type
-
-class TabLinker(object):
+class TabLink(object):
     def __init__(self, conf, excelFileName, markingFileName, dataFileName, processAnnotations = False):
         """
         Constructor
@@ -62,7 +56,7 @@ class TabLinker(object):
         """
         Start processing all the sheets in workbook
         """
-        self.log.debug('Starting TabLinker for all sheets in workbook')
+        self.log.debug('Starting TabLink for all sheets in workbook')
         # keep the starting time (ex "2012-04-15T13:00:00-04:00")
         startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
                             datatype=self.conf.getURI('xsd','dateTime'))
@@ -83,7 +77,7 @@ class TabLinker(object):
                         RDF.type,
                         self.conf.getURI('dcat', 'DataSet')
                         ))
-        fileUri = BNode()
+        fileUri = self.conf.getURI('cedar', "{0}-src-dist".format(self.basename, n))
         self.graph.add((srcURI,
                         self.conf.getURI('dcat', 'distribution'),
                         fileUri
@@ -94,7 +88,7 @@ class TabLinker(object):
                         ))
         self.graph.add((fileUri,
                         self.conf.getURI('dcterms', 'accessURL'),
-                        URIRef('file://'+os.path.abspath(self.excelFileName))
+                        URIRef('https://github.com/CEDAR-project/Integrator/raw/master/'+os.path.relpath(self.excelFileName))
                         ))
         # The activity is the conversion process
         activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename, n))
@@ -110,19 +104,9 @@ class TabLinker(object):
                         self.conf.getURI('prov', 'endedAtTime'),
                         endTime
                         ))
-        # Tablinker did it
-        tablinkURI = self.conf.getURI('tablink', "tabLinker")
         self.graph.add((activityURI,
                         self.conf.getURI('prov', 'wasAssociatedWith'),
-                        tablinkURI
-                        ))
-        self.graph.add((tablinkURI,
-                        RDF.type,
-                        self.conf.getURI('prov', 'SoftwareAgent')
-                        ))
-        self.graph.add((tablinkURI,
-                        self.conf.getURI('rdfs', 'label'),
-                        Literal("TabLinker")
+                        self.conf.getURI('tablink', "tabLink")
                         ))
         
         # Save the graph
@@ -200,7 +184,12 @@ class TabLinker(object):
                 # Parse annotation if any and if their processing is enabled
                 if (i, j) in sheet.cell_note_map and self.processAnnotations:
                     self.handleAnnotation(cell)
-                    
+                
+        # Relate all the row properties to their row headers
+        for rowDimension in rowDimensions:
+                for (p,v) in rowDimensions[rowDimension].iteritems():
+                    self.graph.add((v, self.conf.getURI('tablink', 'parentCell'), p))
+        
         # Add additional information about the hierarchy of column headers
         # for value in columnDimensions.values():
         #    for index in range(1, len(value)):
@@ -208,82 +197,13 @@ class TabLinker(object):
         #        uri_top = self.getColHeaderValueURI(value[:index])
         #        self.graph.add((uri_sub, self.namespaces['tablink']['subColHeaderOf'], uri_top))
         
-        # Write the ontology for tablinker
-        self.graph.add((self.conf.getURI('tablink', 'value'), RDF.type, self.conf.getURI('qb', 'MeasureProperty')))
-        self.graph.add((self.conf.getURI('tablink', 'cell'), RDF.type, RDF.Property))
-        self.graph.add((self.conf.getURI('tablink', 'parentCell'), RDF.type, RDF.Property))
-        self.graph.add((self.conf.getURI('tablink', 'dimension'), RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
-        self.graph.add((self.conf.getURI('tablink', 'ColumnHeader'), RDFS.subClassOf, self.conf.getURI('qb', 'DimensionProperty')))
-        
-        # Write the DSD
-        dsdURI = datasetURI + "-dsd"
-        self.graph.add((dsdURI,
-                        RDF.type,
-                        self.conf.getURI('qb', 'DataStructureDefinition')
-                        ))
-        ## The dimensions
-        order = 1
-        dimensions = []
-        for (_,dimmap) in rowDimensions.iteritems():
-            for (dim, _) in dimmap.iteritems():
-                if dim not in dimensions:
-                    dimensions.append(dim)
-        for dim in dimensions:
-            node = BNode();
-            self.graph.add((dsdURI,
-                            self.conf.getURI('qb', 'component'),
-                            node
-                            ))
-            self.graph.add((node,
-                            self.conf.getURI('qb', 'dimension'),
-                            dim
-                            ))
-            self.graph.add((node,
-                            self.conf.getURI('qb', 'order'),
-                            Literal(order)
-                            ))
-            order = order + 1
-        node = BNode();
-        self.graph.add((dsdURI,
-                        self.conf.getURI('qb', 'component'),
-                        node
-                        ))
-        self.graph.add((node,
-                        self.conf.getURI('qb', 'dimension'),
-                        self.conf.getURI('tablink', 'dimension')
-                        ))
-        self.graph.add((node,
-                        self.conf.getURI('qb', 'order'),
-                        Literal(order)
-                        ))
-        order = order + 1
-        
-        ## The measure
-        node = BNode()
-        self.graph.add((dsdURI,
-                        self.conf.getURI('qb', 'component'),
-                        node
-                        ))
-        self.graph.add((node,
-                        self.conf.getURI('qb', 'measure'),
-                        self.conf.getURI('tablink', 'value')
-                        ))
-                        
         # Describe the data set
         self.graph.add((datasetURI,
                         RDF.type,
-                        self.conf.getURI('qb', 'DataSet')
+                        self.conf.getURI('tablink', 'Sheet')
                         ))
         self.graph.add((datasetURI,
-                        RDF.type,
-                        self.conf.getURI('prov', 'Entity')
-                        ))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('qb', 'structure'),
-                        dsdURI
-                        ))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('tablink', 'sheetName'),
+                        self.conf.getURI('rdfs', 'label'),
                         Literal(sheet.name)
                         ))
         # all the dataset come from the same file
@@ -306,28 +226,22 @@ class TabLinker(object):
         if cell['isEmpty']:
             return
         
-        # It's an observation
-        self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'Observation')))
-        
-        # and an entity we can use in provenance tracking
-        self.graph.add((cell['URI'], RDF.type, self.conf.getURI('prov', 'Entity')))
-        
-        # It's in the data set defined by the current sheet
-        self.graph.add((cell['URI'], self.conf.getURI('qb', 'dataSet'), cell['datasetURI']))
-        
-        # Add it's value (removed the datatype=XSD.decimal because we can't be sure)
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'])))
-        
+        # Add the cell to the graph
+        self._createCell(cell, self.conf.getURI('tablink', 'DataCell'))
+            
         # Bind all the row dimensions
         try :
-            for (prop, value) in rowDimensions[cell['i']].iteritems() :
-                self.graph.add((cell['URI'], prop, Literal(value)))
+            for dim in rowDimensions[cell['i']].itervalues():
+                self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
         except KeyError :
             self.log.debug("({}.{}) No row dimension for cell".format(cell['i'], cell['j']))
         
-        # Bind the last of column dimensions, the others are linked via the parent cell property
-        dim = columnDimensions[cell['j']][-1]
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
+        # Bind all the column dimensions
+        try :
+            for dim in columnDimensions[cell['j']]:
+                self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
+        except KeyError :
+            self.log.debug("({}.{}) No column dimension for cell".format(cell['i'], cell['j']))
         
     def handleRowHeader(self, cell, rowDimensions, rowProperties) :
         """
@@ -336,6 +250,9 @@ class TabLinker(object):
         if cell['isEmpty']:
             return
 
+        # Add the cell to the graph
+        self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
+        
         # Get the row        
         i = cell['i']
         # Get the property for the column
@@ -343,7 +260,7 @@ class TabLinker(object):
         prop = rowProperties[j]
 
         rowDimensions.setdefault(i, {})
-        rowDimensions[i][prop] = cell['value']
+        rowDimensions[i][prop] = cell['URI']
  
     
     def handleHRowHeader(self, cell, rowDimensions, rowProperties) :
@@ -358,31 +275,20 @@ class TabLinker(object):
         j = cell['j']
         prop = rowProperties[j]
         
-        if (cell['isEmpty'] or cell['value'].lower() == 'id.') :
+        if (cell['isEmpty'] or cell['value'].lower() == 'id.' or cell['value'].lower() == 'id ') :
             # If the cell is empty, and a HierarchicalRowHeader, add the value of the row header above it.
-            # If the cell above is not in the rowValues, don't do anything.
-            # If the cell is exactly 'id.', add the value of the row header above it. 
-            try :
+            # If the cell is exactly 'id.', add the value of the row header above it.
+            try:
                 rowDimensions.setdefault(i, {})
                 rowDimensions[i][prop] = rowDimensions[i - 1][prop]
-                # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
-            except :
-                pass
-                # REMOVED because of double slashes in uris
-                # self.rowValues[i][j] = self.source_cell.value
-                # self.log.debug("({},{}) Top row, added nothing\nRow hierarchy: {}".format(i, j, rowValues[i]))
-        elif cell['value'].lower().startswith('id') and len(cell['value'].lower()) == 3:
-            # If the cell starts with 'id.' or 'id ', add the value of the row  above it, and append the rest of the cell's value.
-            suffix = cell['value'][3:]               
-            try :       
-                rowDimensions[i][prop] = rowDimensions[i - 1][prop] + suffix
-                # self.log.debug("({},{}) Copied from above+suffix\nRow hierarchy {}".format(i, j, rowValues[i]))
-            except :
-                rowDimensions[i][prop] = cell['value']
-                # self.log.debug("({},{}) Top row, added value\nRow hierarchy {}".format(i, j, rowValues[i]))
+            except:
+                self.log.warn("Key error")
+            # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
         elif not cell['isEmpty']:
+            # Add the cell to the graph
+            self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
             rowDimensions.setdefault(i, {})
-            rowDimensions[i][prop] = cell['value']
+            rowDimensions[i][prop] = cell['URI']
             # self.log.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowValues[i]))
     
     def handleColHeader(self, cell, columnDimensions) :
@@ -398,12 +304,9 @@ class TabLinker(object):
             self.log.debug("({},{}) Inside merge box ({}, {})".format(cell['i'], cell['j'], k, l))
             dimension = columnDimensions[l][-1]
         else:
-            # Add a new dimension to the graph
+            # Add the cell to the graph
             self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'ColumnHeader')))
-            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
-            self.graph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
-            self.graph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
+            self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'))
             # If there is already a parent dimension, connect to it
             if cell['j'] in columnDimensions:
                 self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))
@@ -424,13 +327,9 @@ class TabLinker(object):
             self.log.debug("({},{}) Inside merge box ({}, {})".format(cell['i'], cell['j'], k, l))
             dimension = rowProperties[l]
         else:
-            # Add a new dimension to the graph
+            # Add the cell to the graph
             self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('tablink', 'RowProperty')))
-            # self.graph.add((cell['URI'], RDF.type, RDF['Property']))
-            self.graph.add((cell['URI'], RDF.type, self.conf.getURI('qb', 'DimensionProperty')))
-            self.graph.add((cell['URI'], RDFS.label, Literal(cell['value'])))
-            self.graph.add((cell['URI'], self.conf.getURI('tablink', 'cell'), Literal(cell['name'])))
+            self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'))
             dimension = cell['URI']
             
         rowProperties[cell['j']] = dimension        
@@ -439,7 +338,7 @@ class TabLinker(object):
         """
         Create relevant triples for the cell marked as Title 
         """
-        self.graph.add((cell['datasetURI'], self.conf.getURI('tablink', 'title'), Literal(cell['value'])))        
+        self.graph.add((cell['datasetURI'], self.conf.getURI('rdfs', 'comment'), Literal(cell['value'])))        
     
     def handleAnnotation(self, cell) :
         """
@@ -475,7 +374,7 @@ class TabLinker(object):
                         ))
         self.graph.add((annotation,
                         self.conf.getURI('oa','serializedBy'),
-                        URIRef("https://github.com/Data2Semantics/TabLinker")
+                        URIRef("https://github.com/CEDAR-project/Integrator")
                         ))
         self.graph.add((annotation,
                         self.conf.getURI('oa','serializedAt'),
@@ -571,7 +470,23 @@ class TabLinker(object):
             if not self.isEmpty(i, j):
                 return False
         return True
-         
+    
+    def _createCell(self, cell, cell_type):
+        # It's an observation
+        self.graph.add((cell['URI'], RDF.type, cell_type))
+        
+        # and an entity we can use in provenance tracking
+        # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('prov', 'Entity')))
+        
+        # It's in the data set defined by the current sheet
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'sheet'), cell['datasetURI']))
+        
+        # Add its value (removed the datatype=XSD.decimal because we can't be sure)
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'])))
+        
+        # Add its cell name
+        self.graph.add((cell['URI'], self.conf.getURI('rdfs', 'label'), Literal(cell['name'])))
+        
 if __name__ == '__main__':
     config = Configuration('config.ini')
     
@@ -580,7 +495,7 @@ if __name__ == '__main__':
     markingFile = "data-test/simple-marking.txt"
     dataFile = "/tmp/data.ttl"
 
-    tLinker = TabLinker(config, inputFile, markingFile, dataFile, processAnnotations = True)
+    tLinker = TabLink(config, inputFile, markingFile, dataFile, processAnnotations = True)
     tLinker.doLink()
     
 
