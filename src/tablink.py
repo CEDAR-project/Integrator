@@ -16,6 +16,7 @@ import pprint
 
 import sys
 from common.configuration import Configuration
+from rdflib.namespace import RDFS
 reload(sys)
 import traceback
 sys.setdefaultencoding("utf8")  # @UndefinedVariable
@@ -63,35 +64,99 @@ class TabLink(object):
 
         # Process all the sheets
         self.log.info(self.basename + ':Found %d sheets to process' % self.wb.nsheets)
+        sheetURIs = []
         for n in range(self.wb.nsheets) :
             self.log.debug('Processing sheet {0}'.format(n))
-            self.parseSheet(n)
-    
+            sheetURI = self.parseSheet(n)
+            sheetURIs.append(sheetURI)
+            
         # end time for the conversion process
         endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
                           datatype=self.conf.getURI('xsd','dateTime'))
         
-        # Add more data about the source file
-        srcURI = self.conf.getURI('cedar', "{0}-src".format(self.basename, n))
+        # Mint the URIs
+        datasetURI  = self.conf.getURI('cedar', "{0}".format(self.basename))
+        distURI     = self.conf.getURI('cedar', "{0}-dist".format(self.basename))
+        activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename))
+        srcURI      = self.conf.getURI('cedar', "{0}-src".format(self.basename))
+        srcdistURI  = self.conf.getURI('cedar', "{0}-src-dist".format(self.basename))
+        root = URIRef("https://github.com/CEDAR-project/Integrator/raw/master/")
+        datasetDumpURI = root + os.path.relpath(self.dataFileName)
+        if self.conf.isCompress():
+            datasetDumpURI = datasetDumpURI + '.bz2' 
+        excelFileURI = root + self.excelFileName
+        markingURI = root + self.markingFileName
+        
+        # Describe the data set
+        self.graph.add((datasetURI,
+                        RDF.type,
+                        self.conf.getURI('dcat', 'DataSet')
+                        ))
+        self.graph.add((datasetURI,
+                        RDFS.label,
+                        Literal(self.basename)
+                        ))
+        self.graph.add((datasetURI,
+                        self.conf.getURI('prov', 'wasDerivedFrom'),
+                        srcURI
+                        ))
+        self.graph.add((datasetURI,
+                        self.conf.getURI('prov', 'wasGeneratedBy'),
+                        activityURI
+                        ))
+        for sheetURI in sheetURIs:
+            self.graph.add((datasetURI,
+                            self.conf.getURI('dcterms', 'hasPart'),
+                            sheetURI
+                            ))
+        self.graph.add((datasetURI,
+                        self.conf.getURI('dcat', 'distribution'),
+                        distURI
+                        ))
+        self.graph.add((distURI,
+                        RDF.type,
+                        self.conf.getURI('dcat', 'Distribution')
+                        ))
+        self.graph.add((distURI,
+                        RDFS.label,
+                        Literal(os.path.basename(self.dataFileName))
+                        ))
+        self.graph.add((distURI,
+                        self.conf.getURI('dcterms', 'title'),
+                        Literal(os.path.basename(self.dataFileName))
+                        ))
+        self.graph.add((distURI,
+                        self.conf.getURI('dcterms', 'accessURL'),
+                        datasetDumpURI
+                        ))
+            
+        # Describe the source of the dataset
         self.graph.add((srcURI,
                         RDF.type,
                         self.conf.getURI('dcat', 'DataSet')
                         ))
-        fileUri = self.conf.getURI('cedar', "{0}-src-dist".format(self.basename, n))
         self.graph.add((srcURI,
-                        self.conf.getURI('dcat', 'distribution'),
-                        fileUri
-                        ))
-        self.graph.add((fileUri,
                         self.conf.getURI('dcterms', 'title'),
                         Literal(os.path.basename(self.excelFileName))
                         ))
-        self.graph.add((fileUri,
-                        self.conf.getURI('dcterms', 'accessURL'),
-                        URIRef('https://github.com/CEDAR-project/Integrator/raw/master/'+os.path.relpath(self.excelFileName))
+        self.graph.add((srcURI,
+                        self.conf.getURI('dcat', 'distribution'),
+                        srcdistURI
                         ))
+        self.graph.add((srcdistURI,
+                        RDF.type,
+                        self.conf.getURI('dcat', 'Distribution')
+                        ))
+        self.graph.add((srcdistURI,
+                        RDFS.label,
+                        Literal(os.path.basename(self.excelFileName))
+                        ))
+        self.graph.add((srcdistURI,
+                        self.conf.getURI('dcterms', 'accessURL'),
+                        excelFileURI
+                        ))
+        
         # The activity is the conversion process
-        activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename, n))
         self.graph.add((activityURI,
                         RDF.type,
                         self.conf.getURI('prov', 'Activity')
@@ -107,6 +172,10 @@ class TabLink(object):
         self.graph.add((activityURI,
                         self.conf.getURI('prov', 'wasAssociatedWith'),
                         self.conf.getURI('tablink', "tabLink")
+                        ))
+        self.graph.add((activityURI,
+                        self.conf.getURI('prov', 'used'),
+                        markingURI
                         ))
         
         # Save the graph
@@ -129,8 +198,12 @@ class TabLink(object):
         rowns = number_of_good_rows(sheet)
         self.log.info(self.basename + ":Parsing {0} rows and {1} columns in sheet \"{2}\"".format(rowns, colns, sheet.name))
         
-        # Define a datasetURI for the current sheet
-        datasetURI = self.conf.getURI('cedar', "{0}_S{1}".format(self.basename, n))
+        # Define a sheetURI for the current sheet
+        sheetURI = self.conf.getURI('cedar', "{0}_S{1}".format(self.basename, n))
+        
+        # Describe the sheet
+        self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
+        self.graph.add((sheetURI, RDFS.label, Literal(sheet.name)))
         
         columnDimensions = {}
         rowDimensions = {}
@@ -160,9 +233,9 @@ class TabLink(object):
                     # Is empty ?
                     'isEmpty' : self.isEmpty(sheet.cell(i, j)),
                     # Compose a resource name for the cell
-                    'URI' : URIRef("{0}_{1}".format(datasetURI, cellname(i, j))),
-                    # Pass on the URI of the dataset
-                    'datasetURI' : datasetURI
+                    'URI' : URIRef("{0}_{1}".format(sheetURI, cellname(i, j))),
+                    # Pass on the URI of the data set
+                    'sheetURI' : sheetURI
                 }
                 
                 # self.log.debug("({},{}) {}/{}: \"{}\"". format(i, j, cellType, cellName, cellValue))
@@ -197,27 +270,7 @@ class TabLink(object):
         #        uri_top = self.getColHeaderValueURI(value[:index])
         #        self.graph.add((uri_sub, self.namespaces['tablink']['subColHeaderOf'], uri_top))
         
-        # Describe the data set
-        self.graph.add((datasetURI,
-                        RDF.type,
-                        self.conf.getURI('tablink', 'Sheet')
-                        ))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('rdfs', 'label'),
-                        Literal(sheet.name)
-                        ))
-        # all the dataset come from the same file
-        srcURI = self.conf.getURI('cedar', "{0}-src".format(self.basename, n))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('prov', 'wasDerivedFrom'),
-                        srcURI
-                        ))
-        # and are generated by the same activity
-        activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename, n))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('prov', 'wasGeneratedBy'),
-                        activityURI
-                        ))
+        return sheetURI
         
     def handleData(self, cell, columnDimensions, rowDimensions) :
         """
@@ -282,7 +335,7 @@ class TabLink(object):
                 rowDimensions.setdefault(i, {})
                 rowDimensions[i][prop] = rowDimensions[i - 1][prop]
             except:
-                self.log.warn("Key error")
+                pass
             # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
         elif not cell['isEmpty']:
             # Add the cell to the graph
@@ -338,7 +391,7 @@ class TabLink(object):
         """
         Create relevant triples for the cell marked as Title 
         """
-        self.graph.add((cell['datasetURI'], self.conf.getURI('rdfs', 'comment'), Literal(cell['value'])))        
+        self.graph.add((cell['sheetURI'], self.conf.getURI('rdfs', 'comment'), Literal(cell['value'])))        
     
     def handleAnnotation(self, cell) :
         """
@@ -365,13 +418,18 @@ class TabLink(object):
                         body
                         ))
         self.graph.add((body,
-                        RDF.value,
+                        RDF.type,
+                        RDFS.Resource
+                        ))
+        self.graph.add((body,
+                        self.conf.getURI('tablink','value'),
                         Literal(annot.text.replace("\n", " ").replace("\r", " ").replace("\r\n", " ").encode('utf-8'))
                         ))
-        self.graph.add((annotation,
-                        self.conf.getURI('oa','annotatedBy'),
-                        Literal(annot.author.encode('utf-8'))
-                        ))
+        if annot.author.encode('utf-8') != "":
+            self.graph.add((annotation,
+                            self.conf.getURI('oa','annotatedBy'),
+                            Literal(annot.author.encode('utf-8'))
+                            ))
         self.graph.add((annotation,
                         self.conf.getURI('oa','serializedBy'),
                         URIRef("https://github.com/CEDAR-project/Integrator")
@@ -479,7 +537,7 @@ class TabLink(object):
         # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('prov', 'Entity')))
         
         # It's in the data set defined by the current sheet
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'sheet'), cell['datasetURI']))
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'sheet'), cell['sheetURI']))
         
         # Add its value (removed the datatype=XSD.decimal because we can't be sure)
         self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'])))

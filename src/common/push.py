@@ -1,15 +1,12 @@
-import pycurl
 import bz2
 import os
 import sys
-import traceback
 import requests
 import glob
 import subprocess
+import multiprocessing
 
-SPARQL = "http://lod.cedar-project.nl:8080/sparql"
-SERVER = "http://lod.cedar-project.nl:8080/sparql-graph-crud"
-BUFFER = "data/tmp/buffer.nt"
+BUFFER = "data/tmp/buffer.txt"
 MAX_NT = 1000 # hard max apparently for Virtuoso
 
 # Working POST
@@ -17,10 +14,11 @@ MAX_NT = 1000 # hard max apparently for Virtuoso
 # http://virtuoso.openlinksw.com/dataspace/doc/dav/wiki/Main/VirtTipsAndTricksGuideDeleteLargeGraphs
 
 class Pusher(object):
-    def __init__(self):
+    def __init__(self, sparql):
         self.cred = ':'.join([c.strip() for c in open('credentials-virtuoso.txt')])
         self.user = self.cred.split(':')[0]
         self.pas = self.cred.split(':')[1]
+        self.sparql = sparql
         
     def clean_graph(self, uri):
         # Clear the previous graph
@@ -28,72 +26,61 @@ class Pusher(object):
         DEFINE sql:log-enable 3 
         CLEAR GRAPH <%s>
         """ % uri
-        r = requests.post(SPARQL, auth=(self.user,self.pas), data={'query' : query})
+        r = requests.post(self.sparql, auth=(self.user,self.pas), data={'query' : query})
         print r.status_code
     
-    def upload_graph(self, uri, turle_file):
-        try:
-            data_file = turle_file
-            if turle_file.endswith('.bz2'):
-                data_file = '/tmp/data.ttl'
-                f = open(data_file, 'wb')
-                f.write(bz2.BZ2File(turle_file).read())
-                f.close()
-             
-            r = requests.post(SERVER + "?graph-uri=" + uri,
-                              (self.user,self.pas), data=file(data_file,'rb').read())
-            print r.status_code
-        except:
-            traceback.print_exc(file=sys.stdout)
-        
     def upload_directory(self, graph_uri, directory):
         for input_file in sorted(glob.glob(directory)):
             # First remove the last BUFFER        
             if os.path.isfile(BUFFER):
                 os.unlink(BUFFER)
             
+            # Serialise the triples as ntriples in BUFFER
             if input_file.endswith('.bz2'):
-                f = open(BUFFER + '-part', 'wb')
+                f = open(BUFFER + '-unzip', 'wb')
                 f.write(bz2.BZ2File(input_file).read())
                 f.close()
-                subprocess.call("rapper -i guess -o ntriples " + BUFFER + '-part > ' + BUFFER, stdout=sys.stdout, shell=True) 
+                subprocess.call("rapper -i guess -o ntriples " + BUFFER + '-unzip > ' + BUFFER, stderr=sys.stdout, shell=True)
             else:
                 subprocess.call("rapper -i guess -o ntriples " + input_file + ' > ' + BUFFER, stderr=sys.stdout, shell=True) 
             
-            # Load all the data
-            input_file = open(BUFFER, 'rb')
+            # Load all the data into chunks
+            tasks = []
+            chunk = ""
+            input_file = open(BUFFER, 'rb')            
             count = 0
-            query = """
-            DEFINE sql:log-enable 3 
-            INSERT INTO <%s> {
-            """ % graph_uri
             for triple in input_file.readlines():
-                query = query + triple
+                chunk = chunk + triple
                 count = count + 1
-                
+                # If we reach the max, store the chunk
                 if count == MAX_NT:
-                    # Finish and send the query
-                    query = query + "}"
-                    r = requests.post(SPARQL, auth=(self.user,self.pas), data={'query' : query})
-                    print r.status_code
-                    
-                    # Restart
+                    tasks.append({"chunk": chunk, "graph_uri":graph_uri})
                     count = 0
-                    query = """
-                    DEFINE sql:log-enable 3 
-                    INSERT INTO <%s> {
-                    """ % graph_uri
-    
-            # Send whatever is left over
-            query = query + "}"
-            r = requests.post(SPARQL, auth=(self.user,self.pas), data={'query' : query})
-            print r.status_code
-            
+                    chunk = ""
+            # Store the last chunk
+            tasks.append({"chunk": chunk, "graph_uri":graph_uri})
             input_file.close()
-            
+                        
+            # Send everything !
+            pool_size = 6 # Try to still not hammer Virtuoso too much
+            pool = multiprocessing.Pool(processes=pool_size)
+            pool.map(self._push_chunk_thread, tasks)
+            pool.close()
+            pool.join()
+                        
+    def _push_chunk_thread(self, parameters):
+        graph_uri = parameters['graph_uri']
+        chunk = parameters['chunk']
+        query = """
+        DEFINE sql:log-enable 3 
+        INSERT INTO <%s> {
+        """ % graph_uri
+        query = query + chunk + "}"
+        requests.post(self.sparql, auth=(self.user,self.pas), data={'query' : query})
+        
 if __name__ == '__main__':
     graph = "urn:graph:update:test:put"
-    pusher = Pusher()
+    pusher = Pusher("http://lod.cedar-project.nl:8080/sparql")
     pusher.clean_graph(graph)
     pusher.upload_directory(graph, "data-test/rdf/*")
 
