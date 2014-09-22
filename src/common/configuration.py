@@ -34,7 +34,7 @@ class Configuration(object):
     def getURI(self, ns, resourceName):
         return self.namespaces[ns][resourceName]
     
-    def get_Graph(self, name):
+    def get_graph_name(self, name):
         return self.config.get('graphs', name)
     
     def get_SPARQL(self):

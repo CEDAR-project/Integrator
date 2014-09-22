@@ -24,10 +24,10 @@ def get_datasets_list(config):
     datasets = []
     sparql = SPARQLWrap(config)
     query = """
-    select distinct ?ds from <urn:graph:cedar:raw-rdf> where {
+    select distinct ?ds from <%s> where {
     ?ds a tablink:Sheet.
     } order by ?ds
-    """
+    """ % config.get_graph_name('raw-data')
     results = sparql.run_select(query, None)
     for result in results:
         datasets.append(sparql.format(result['ds']))
@@ -134,7 +134,7 @@ def push_to_virtuoso(config, named_graph, directory):
     '''
     Push data to virtuoso
     '''
-    pusher = Pusher("http://lod.cedar-project.nl:8080/sparql")
+    pusher = Pusher(config.get_SPARQL())
     log.info("Clean " + named_graph)
     pusher.clean_graph(named_graph)
     pusher.upload_directory(named_graph, directory)
@@ -151,20 +151,20 @@ if __name__ == '__main__':
         os.makedirs(RELEASE_PATH)
         
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
-    generate_raw_rdf(config)
+    #generate_raw_rdf(config)
     
     # Step 2 : push all the raw rdf to the triple store
-    push_to_virtuoso(config, 'urn:graph:cedar:raw-data', RAW_RDF_PATH + '/*')
+    push_to_virtuoso(config, config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
     
     # Step 3 : generate harmonisation rules
-    #generate_harmonization_rules(config)
+    # generate_harmonization_rules(config)
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    #push_to_virtuoso(config, 'urn:graph:cedar:harmonization_rules', H_RULES_PATH + '/*')
+    # push_to_virtuoso(config, 'urn:graph:cedar:harmonization_rules', H_RULES_PATH + '/*')
     
     # Step 5 : get the observations from all the cube and try to harmonize them
-    #create_harmonized_dataset(config)
+    # create_harmonized_dataset(config)
     
     # Step 6 : push the harmonized data and all additional files to the release
-    #push_to_virtuoso(config, 'urn:graph:cedar:harmonised_data', RELEASE_PATH + '/*')
+    # push_to_virtuoso(config, 'urn:graph:cedar:harmonised_data', RELEASE_PATH + '/*')
     

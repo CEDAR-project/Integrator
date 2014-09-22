@@ -7,12 +7,25 @@ import subprocess
 import multiprocessing
 
 BUFFER = "data/tmp/buffer.txt"
-MAX_NT = 1000 # hard max apparently for Virtuoso
+MAX_NT = 1000  # hard max apparently for Virtuoso
 
 # Working POST
 # curl --digest --user "dba:naps48*mimed" --verbose --url "http://lod.cedar-project.nl:8080/sparql-graph-crud?graph-uri=urn:graph:update:test:put" -X POST -T /tmp/data.ttl 
 # http://virtuoso.openlinksw.com/dataspace/doc/dav/wiki/Main/VirtTipsAndTricksGuideDeleteLargeGraphs
 
+def _push_chunk_thread(self, parameters):
+    graph_uri = parameters['graph_uri']
+    chunk = parameters['chunk']
+    sparql = parameters['sparql']
+    user = parameters['user']
+    pas = parameters['pas']
+    query = """
+    DEFINE sql:log-enable 3 
+    INSERT INTO <%s> {
+    """ % graph_uri
+    query = query + chunk + "}"
+    requests.post(sparql, auth=(user, pas), data={'query' : query})
+        
 class Pusher(object):
     def __init__(self, sparql):
         self.cred = ':'.join([c.strip() for c in open('credentials-virtuoso.txt')])
@@ -26,7 +39,7 @@ class Pusher(object):
         DEFINE sql:log-enable 3 
         CLEAR GRAPH <%s>
         """ % uri
-        r = requests.post(self.sparql, auth=(self.user,self.pas), data={'query' : query})
+        r = requests.post(self.sparql, auth=(self.user, self.pas), data={'query' : query})
         print r.status_code
     
     def upload_directory(self, graph_uri, directory):
@@ -54,7 +67,11 @@ class Pusher(object):
                 count = count + 1
                 # If we reach the max, store the chunk
                 if count == MAX_NT:
-                    tasks.append({"chunk": chunk, "graph_uri":graph_uri})
+                    tasks.append({"chunk": chunk,
+                                  "graph_uri":graph_uri,
+                                  "sparql": self.sparql,
+                                  "user": self.user,
+                                  "pas": self.pas})
                     count = 0
                     chunk = ""
             # Store the last chunk
@@ -62,21 +79,12 @@ class Pusher(object):
             input_file.close()
                         
             # Send everything !
-            pool_size = 6 # Try to still not hammer Virtuoso too much
+            pool_size = 6  # Try to still not hammer Virtuoso too much
             pool = multiprocessing.Pool(processes=pool_size)
-            pool.map(self._push_chunk_thread, tasks)
+            pool.map(_push_chunk_thread, tasks)
             pool.close()
             pool.join()
                         
-    def _push_chunk_thread(self, parameters):
-        graph_uri = parameters['graph_uri']
-        chunk = parameters['chunk']
-        query = """
-        DEFINE sql:log-enable 3 
-        INSERT INTO <%s> {
-        """ % graph_uri
-        query = query + chunk + "}"
-        requests.post(self.sparql, auth=(self.user,self.pas), data={'query' : query})
         
 if __name__ == '__main__':
     graph = "urn:graph:update:test:put"
