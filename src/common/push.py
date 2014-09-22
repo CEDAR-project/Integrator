@@ -13,7 +13,7 @@ MAX_NT = 1000  # hard max apparently for Virtuoso
 # curl --digest --user "dba:naps48*mimed" --verbose --url "http://lod.cedar-project.nl:8080/sparql-graph-crud?graph-uri=urn:graph:update:test:put" -X POST -T /tmp/data.ttl 
 # http://virtuoso.openlinksw.com/dataspace/doc/dav/wiki/Main/VirtTipsAndTricksGuideDeleteLargeGraphs
 
-def _push_chunk_thread(self, parameters):
+def _push_chunk_thread(parameters):
     graph_uri = parameters['graph_uri']
     chunk = parameters['chunk']
     sparql = parameters['sparql']
@@ -79,7 +79,7 @@ class Pusher(object):
             input_file.close()
                         
             # Send everything !
-            pool_size = 6  # Try to still not hammer Virtuoso too much
+            pool_size = 4  # Try to still not hammer Virtuoso too much
             pool = multiprocessing.Pool(processes=pool_size)
             pool.map(_push_chunk_thread, tasks)
             pool.close()
