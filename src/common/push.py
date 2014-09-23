@@ -75,7 +75,11 @@ class Pusher(object):
                     count = 0
                     chunk = ""
             # Store the last chunk
-            tasks.append({"chunk": chunk, "graph_uri":graph_uri})
+            tasks.append({"chunk": chunk, 
+                          "graph_uri":graph_uri,
+                          "sparql": self.sparql,
+                          "user": self.user,
+                          "pas": self.pas})
             input_file.close()
                         
             # Send everything !
