@@ -163,8 +163,8 @@ if __name__ == '__main__':
     #push_to_virtuoso(config, config.get_graph_name('rules'), H_RULES_PATH + '/*')
     
     # Step 5 : get the observations from all the cube and try to harmonize them
-    # create_harmonized_dataset(config)
+    create_harmonized_dataset(config)
     
     # Step 6 : push the harmonized data and all additional files to the release
-    # push_to_virtuoso(config, 'urn:graph:cedar:harmonised_data', RELEASE_PATH + '/*')
+    push_to_virtuoso(config, config.get_graph_name('release'), RELEASE_PATH + '/*')
     
