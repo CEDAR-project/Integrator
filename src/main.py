@@ -15,10 +15,10 @@ log = logging.getLogger("Main")
 # All the paths
 RAW_XLS_FILES = "data/input/raw-xls/*.xls"  # Raw XLS files fetched from EASY
 MARKING_FILES = "data/input/marking/*.txt"  # Annotations for the files
-MAPPING_FILES = "data/input/codes/*.csv"  # All the mapping
-RAW_RDF_PATH = "data/output/raw-rdf/"  # The raw RDF for the marked XLS
-H_RULES_PATH = "data/output/rules/"  # The harmonisation rules
-RELEASE_PATH = "data/output/cubes/"  # The released data set
+MAPPING_FILES = "data/input/codes/*.csv"    # All the mapping
+RAW_RDF_PATH = "data/output/raw-rdf/"       # The raw RDF for the marked XLS
+H_RULES_PATH = "data/output/rules/"         # The harmonisation rules
+RELEASE_PATH = "data/output/release/"       # The released data set
 
 def get_datasets_list(config):
     datasets = []

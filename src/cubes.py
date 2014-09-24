@@ -266,7 +266,8 @@ if __name__ == '__main__':
     # BRT_1889_05_T4_S0 -> 43 obs
     # BRT_1889_05_T5_S0 -> 221 obs
     # VT_1947_A1_T
-    sheet_uri = config.getURI('cedar', 'BRT_1889_05_T4_S0')
+    # BRT_1889_05_T4_S0
+    sheet_uri = config.getURI('cedar', 'BRT_1889_03_T1_S0')
 
     # Test
     cube = CubeMaker(config)
