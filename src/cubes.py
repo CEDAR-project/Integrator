@@ -1,6 +1,5 @@
 #!/usr/bin/python2
 from rdflib import ConjunctiveGraph, Literal, RDF
-from codes import Codes
 from common.configuration import Configuration
 from common.sparql import SPARQLWrap
 from rdflib.namespace import XSD, RDFS
@@ -24,9 +23,6 @@ class CubeMaker(object):
         # Keep parameters
         self.conf = configuration
         
-        # Load the codes
-        self.codes = Codes(configuration)
-
         # Create a wrapper for SPARQL queries
         self.sparql = SPARQLWrap(self.conf)
         

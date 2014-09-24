@@ -69,4 +69,17 @@ construct {
 ?rule harmonizer:value ?val .
 }
 
+# Second model
+## Get number of sheets per source
+prefix qb: <http://purl.org/linked-data/cube#>
+prefix prov: <http://www.w3.org/ns/prov#>
+prefix dcat: <http://www.w3.org/ns/dcat#>
+prefix dcterms: <http://purl.org/dc/terms/>
+prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT distinct ?title (Count(distinct ?sheet) AS ?total) FROM <urn:graph:cedar:raw-data> WHERE {
+	?dataset a dcat:DataSet.
+	?dataset prov:wasDerivedFrom [ dcat:distribution [ rdfs:label ?title ] ].
+	?dataset dcterms:hasPart ?sheet.
+} group by ?title order by ?title
+
 

@@ -154,13 +154,13 @@ if __name__ == '__main__':
     #generate_raw_rdf(config)
     
     # Step 2 : push all the raw rdf to the triple store
-    push_to_virtuoso(config, config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
+    # push_to_virtuoso(config, config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
     
     # Step 3 : generate harmonisation rules
-    # generate_harmonization_rules(config)
+    generate_harmonization_rules(config)
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    # push_to_virtuoso(config, 'urn:graph:cedar:harmonization_rules', H_RULES_PATH + '/*')
+    push_to_virtuoso(config, config.get_graph_name('rules'), H_RULES_PATH + '/*')
     
     # Step 5 : get the observations from all the cube and try to harmonize them
     # create_harmonized_dataset(config)

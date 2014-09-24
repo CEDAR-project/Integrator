@@ -4,9 +4,12 @@ import re
 def clean_string(text):
     """
     Utility function to clean a string
+    TODO speed this up
     """
     # Remove some extra things
-    text_clean = text.replace('.', '').replace('_', ' ').lower()
+    text_clean = text.replace('.', ' ').replace('_', ' ').lower()
+    # Remove new lines
+    text_clean = text_clean.replace('\n', ' ').replace('\r', ' ')
     # Shrink spaces
     text_clean = re.sub(r'\s+', ' ', text_clean)
     # Remove lead and trailing whitespaces
