@@ -28,8 +28,8 @@ class TabLink(object):
         """
         Constructor
         """
-        self.log = logging.getLogger("TabLinker")
         self.conf = conf
+        self.log = conf.getLogger("TabLinker")
         self.excelFileName = excelFileName
         self.markingFileName = markingFileName
         self.dataFileName = dataFileName

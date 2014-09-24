@@ -20,7 +20,7 @@ class Codes(object):
     
     def __init__(self, configuration):
         self.conf = configuration
-        self.log = logging.getLogger("RuleMaker")
+        self.log = configuration.getLogger("RuleMaker")
         
         # Declare the mappings
         self.mappings = {}
@@ -33,7 +33,7 @@ class Codes(object):
             'mappings' : 'data/input/mapping/marital_status.csv'
         }
         self.mappings['occupationPosition'] = {
-            'predicate' : self.conf.getURI('cedar', 'occupationPosition') ,
+            'predicate' : self.conf.getURI('cedar', 'occupationPosition'),
             'mappings' : 'data/input/mapping/occupation_position.csv'
         }
         self.mappings['occupation'] = {

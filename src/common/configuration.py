@@ -16,10 +16,15 @@ class Configuration(object):
                 
             # Set the logger level
             verbose = self.config.get('debug', 'verbose')
-            logLevel = logging.DEBUG if verbose == "1" else logging.INFO
-            logging.basicConfig(level=logLevel)
+            self.logLevel = logging.DEBUG if verbose == "1" else logging.INFO
+            logging.basicConfig()
         except :
             logging.error("Could not find configuration file")
+    
+    def getLogger(self, name):
+        logger = logging.getLogger(name)
+        logger.setLevel(self.logLevel)
+        return logger
     
     def isCompress(self):
         return self.config.get('debug', 'compress') == '1';

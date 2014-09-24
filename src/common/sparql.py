@@ -28,6 +28,20 @@ class SPARQLWrap(object):
         results = sparql.query().convert()
         return results["results"]["bindings"]
 
+    def run_construct(self, query, params = None):
+        '''
+        Execute a SPARQL construct
+        '''
+        sparql = SPARQLWrapper(self.conf.get_SPARQL())
+        if params != None:
+            for (k,v) in params.iteritems():
+                query = query.replace(k,v)
+        query = self.prefixes + query
+        sparql.setQuery(query)
+        sparql.setCredentials('rdfread', 'red_fred')
+        results = sparql.query().convert()
+        return results
+    
     def format(self, entry):
         v = None
         if entry['type'] == 'uri':
