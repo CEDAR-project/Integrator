@@ -1,14 +1,39 @@
 #!/usr/bin/python2
+import bz2
+import sys
+import thread
+import threading
+    
 from rdflib import ConjunctiveGraph, Literal, RDF
 from common.configuration import Configuration
 from common.sparql import SPARQLWrap
 from rdflib.namespace import XSD, RDFS
-import bz2
-import sys
-from rdflib.term import BNode, URIRef
+from rdflib.term import URIRef
 
 # TODO: If the value is not an int mark the point as being ignored
 # TODO: When getting the RDF model from the construct, look for dimensions used
+# TODO: Add a nice label for the slice
+
+#---------------------------------------------------------------------------
+#   Thread-related stuff - copy & pasted from logging
+#---------------------------------------------------------------------------
+_lock = threading.RLock()
+
+def _acquireLock():
+    """
+    Acquire the module-level lock for serializing access to shared data.
+
+    This should be released with _releaseLock().
+    """
+    if _lock:
+        _lock.acquire()
+
+def _releaseLock():
+    """
+    Release the module-level lock acquired by calling _acquireLock().
+    """
+    if _lock:
+        _lock.release()
 
 class CubeMaker(object):
     def __init__(self, configuration):
@@ -24,8 +49,8 @@ class CubeMaker(object):
         # Create a wrapper for SPARQL queries
         self.sparql = SPARQLWrap(self.conf)
         
-        # The URI of the harmonized data set
-        self._harmonized_uri = configuration.getURI('cedar','harmonized-data') 
+        # The URI of the harmonised data set
+        self._ds_uri = configuration.getURI('cedar','harmonized-data') 
         
         # Keep a list of slices
         self._slices = set()
@@ -52,25 +77,25 @@ class CubeMaker(object):
         self.conf.bindNamespaces(graph)
         
         # Create the data set
-        graph.add((self._harmonized_uri,
+        graph.add((self._ds_uri,
                    RDF.type,
                    self.conf.getURI('qb','DataSet')))
-        graph.add((self._harmonized_uri,
+        graph.add((self._ds_uri,
                    RDF.type,
                    self.conf.getURI('prov','Entity')))
-        graph.add((self._harmonized_uri,
+        graph.add((self._ds_uri,
                    self.conf.getURI('dcterms','title'),
                    Literal("Harmonised census data 1795-1971")))
-        graph.add((self._harmonized_uri,
+        graph.add((self._ds_uri,
                    self.conf.getURI('rdfs','label'),
                    Literal("Harmonised census data 1795-1971")))
         for s in self._slices:
-            graph.add((self._harmonized_uri,
+            graph.add((self._ds_uri,
                        self.conf.getURI('qb','slice'),
                        s))
             
         # Finish describing the slices
-        slicestruct_uri = self._harmonized_uri + '-sliced-by-type-and-year'
+        slicestruct_uri = self._ds_uri + '-sliced-by-type-and-year'
         graph.add((slicestruct_uri,
                    RDF.type,
                    self.conf.getURI('qb','SliceKey')))
@@ -99,8 +124,8 @@ class CubeMaker(object):
                        slicestruct_uri))
 
         # Create a DSD
-        dsd = self._harmonized_uri + '-dsd'
-        graph.add((self._harmonized_uri,
+        dsd = self._ds_uri + '-dsd'
+        graph.add((self._ds_uri,
                    self.conf.getURI('qb','structure'),
                    dsd))
         graph.add((dsd,
@@ -191,6 +216,11 @@ class CubeMaker(object):
             self.log.error("Whoops! Something went wrong in serializing to output file")
             self.log.info(sys.exc_info())
     
+    def _add_slice(self, slice_uri):
+        _acquireLock()
+        self._slices.add(slice_uri)
+        _lock.release()
+        
     def process(self, sheet_uri, output_file):        
         """
         Process all the data cells in the target sheet and look for rules to
@@ -198,16 +228,14 @@ class CubeMaker(object):
         """
         # Get the name of the slice to use for these observations
         key = '_'.join(sheet_uri.split('/')[-1].split('_')[:2]) 
-        slice_uri = self._harmonized_uri + '-slice-' + key
-        
-        # TODO: Make this call thread proof
-        self._slices.add(slice_uri)
+        slice_uri = self._ds_uri + '-slice-' + key
+        self._add_slice(slice_uri)
         
         # Fix the parameters for the SPARQL queries
-        query_params = {'SHEET' : sheet_uri,
-                        'SLICE' : slice_uri,
+        query_params = {'SHEET'    : sheet_uri,
+                        'SLICE'    : slice_uri,
                         'RAW-DATA' : self.conf.get_graph_name('raw-data'),
-                        'RULES' : self.conf.get_graph_name('rules')}
+                        'RULES'    : self.conf.get_graph_name('rules')}
         
         # Execute the SPARQL construct
         query = """
