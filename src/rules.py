@@ -16,6 +16,8 @@ from common.sparql import SPARQLWrap
 from rdflib.term import Literal
 from rdflib.namespace import RDFS
 
+# TODO add rdfs:label to everything
+
 class Codes(object):
     
     def __init__(self, configuration):
@@ -157,6 +159,7 @@ class RuleMaker(object):
         startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                             datatype=self.conf.getURI('xsd', 'dateTime'))
         
+        used_mappings = set()
         for key in search_keys:
             # Precise query parameters
             query_params['TARGET'] = key['target']
@@ -185,7 +188,9 @@ class RuleMaker(object):
                     headers[resource]['parent'] = None
                     
             self.log.info("Process %d %s" % (len(headers), key['target']))
-            used_mappings = self.process_headers(graph, activity_URI, headers)
+            used = self.process_headers(graph, activity_URI, headers)
+            for used_mapping in used:
+                used_mappings.add(used_mapping)
             
         # Keep the end time
         endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
