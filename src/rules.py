@@ -1,26 +1,108 @@
 #!/usr/bin/python2
-from SPARQLWrapper import SPARQLWrapper, JSON
-from rdflib import ConjunctiveGraph, RDF, URIRef
 import uuid
 import bz2
 import operator
 import logging
 import sys
-import random
+import csv
+import datetime
+import os
 
-from codes import Codes
+from SPARQLWrapper import SPARQLWrapper, JSON
+from rdflib import ConjunctiveGraph, RDF, URIRef
 from common.configuration import Configuration
 from common.util import clean_string
 from common.sparql import SPARQLWrap
 from rdflib.term import Literal
+from rdflib.namespace import RDFS
 
-# TODO: Put "Ignore" as a specific dimension for the harmonized point
-# TODO: Use SPARQL Construct to apply the rules
-# TOOD: Remove all the BNodes
-# TODO: Fix finding "totaal" in the example
-# TODO: When writing as OA, put the dim/val directly as part of the body of the rule
-# TODO: Remove the link rule->dataset
-# TODO: Use cell as a basename for the rule instead of the UUID
+class Codes(object):
+    
+    def __init__(self, configuration):
+        self.conf = configuration
+        self.log = configuration.getLogger("RuleMaker")
+        
+        # Declare the mappings
+        self.mappings = {}
+        self.mappings['sex'] = {
+            'predicate' : self.conf.getURI('sdmx-dimension', 'sex'),
+            'mappings' : 'data/input/mapping/sex.csv'
+        }
+        self.mappings['maritalstatus'] = {
+            'predicate' : self.conf.getURI('maritalstatus', 'maritalStatus'),
+            'mappings' : 'data/input/mapping/marital_status.csv'
+        }
+        self.mappings['occupationPosition'] = {
+            'predicate' : self.conf.getURI('cedar', 'occupationPosition'),
+            'mappings' : 'data/input/mapping/occupation_position.csv'
+        }
+        self.mappings['occupation'] = {
+            'predicate' : self.conf.getURI('cedar', 'occupation'),
+            'mappings' : 'data/input/mapping/occupation.csv'
+        }
+        self.mappings['belief'] = {
+            'predicate' : self.conf.getURI('cedar', 'belief'),
+            'mappings' : 'data/input/mapping/belief.csv'
+        }
+        self.mappings['city'] = {
+            'predicate' : self.conf.getURI('sdmx-dimension', 'refArea'),
+            'mappings' : 'data/input/mapping/city.csv'
+        }
+        self.mappings['province'] = {
+            'predicate' : self.conf.getURI('sdmx-dimension', 'refArea'),
+            'mappings' : 'data/input/mapping/province.csv'
+        }
+        
+        # Load the content of the files
+        for mapping in self.mappings.values():
+            self.log.debug("Loading %s ..." % mapping['mappings']) 
+            mapping['map'] = dict()   
+            f = open(mapping['mappings'], "rb")
+            reader = csv.reader(f)
+            header_row = True
+            for row in reader:
+                # Skip the header
+                if header_row:
+                    header_row = False
+                    continue
+                # Skip empty lines
+                if len(row) != 2:
+                    continue
+                if row[1].startswith("http"):
+                    mapping['map'][row[0]] = URIRef(row[1])
+                else:
+                    mapping['map'][row[0]] = Literal(row[1])
+            f.close()
+    
+    def get_mapping_types(self):
+        """
+        Return a list of all the mappings loaded
+        """
+        return self.mappings.keys()
+    
+    def get_mapping_src_URI(self, mapping_type):
+        """
+        Return a URI for the file source
+        """
+        if mapping_type not in self.mappings:
+            return None
+        
+        fileName = self.mappings[mapping_type]['mappings']
+        root = URIRef("https://github.com/CEDAR-project/Integrator/raw/master/")
+        mappingsDumpURI = root + os.path.relpath(fileName)
+        return URIRef(mappingsDumpURI)
+    
+    def get_code_for(self, mapping_type, literal):
+        """
+        Return the code associated to a literal or None
+        """
+        if mapping_type not in self.mappings:
+            return None
+        
+        mappings = self.mappings[mapping_type]['map']        
+        if literal not in mappings:
+            return None
+        return (self.mappings[mapping_type]['predicate'], mappings[literal])
 
 class RuleMaker(object):
     def __init__(self, configuration):
@@ -48,81 +130,87 @@ class RuleMaker(object):
         results = sparql.query().convert()
         return results["results"]["bindings"]
     
-    def process(self, dataset_uri, output_file):
-        self.log.info("Start processing %s" % dataset_uri)
+    def process(self, sheet_uri, output_file):
+        '''
+        Function used to process one of the sheets in the data sets
+        '''
+        self.log.info("Start processing sheet %s" % sheet_uri)
         
         # Initialise the graph
         graph = ConjunctiveGraph()
         self.conf.bindNamespaces(graph)
         
         # Fix the parameters for the SPARQL queries
-        query_params = {'DATASET' : dataset_uri}
+        query_params = {'SHEET' : sheet_uri,
+                        'GRAPH' : self.conf.get_graph_name('raw-data')}
+
+        # We look for two type of headers
+        search_keys = [
+            {'target':'tablink:ColumnHeader', 'parent': 'tablink:ColumnHeader'},
+            {'target':'tablink:RowHeader', 'parent': 'tablink:RowProperty'}
+        ]
         
-        #####
-        # Start with the column headers
-        #####
+        # Start describing the activity
+        activity_URI = URIRef(sheet_uri + '-mapping-activity')
         
-        # Get a list of all the column headers
-        # TODO fix the ugly hack with the regex
-        headers = {}
-        query = """
-        select distinct * from <urn:graph:cedar:raw-rdf> where {
-        ?header rdfs:label ?label.
-        ?header a tablink:ColumnHeader.
-        optional {
-        ?header tablink:parentCell ?parent.
-        ?parent a tablink:ColumnHeader.
-        }
-        filter regex(?header, "DATASET", "i")
-        } """
-        results = self.sparql.run_select(query, query_params)
-        for result in results:
-            resource = URIRef(result['header']['value'])
-            headers[resource] = {}
-            headers[resource]['label'] = result['label']['value']
-            if 'parent' in result:
-                headers[resource]['parent'] = URIRef(result['parent']['value'])
-            else:
-                headers[resource]['parent'] = None
-        self.log.info("Process %d column headers" % len(headers))
+        # Keep the start time
+        startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                            datatype=self.conf.getURI('xsd', 'dateTime'))
         
-        # Get a sublist of leaves
-        leaves = []
-        for header in headers.keys():
-            ok = True
-            for h in headers.keys():
-                if headers[h]['parent'] == header:
-                    ok = False
-            if ok:
-                leaves.append(header)
-                
-        # Process all the leaf headers, one by one
-        for leaf in leaves:
-            self.process_column_header(graph, dataset_uri, headers, leaf)
+        for key in search_keys:
+            # Precise query parameters
+            query_params['TARGET'] = key['target']
+            query_params['PARENT'] = key['parent']
             
-        #####
-        # Move on to the row headers
-        #####
-        headers = {}
-        query = """ 
-        select distinct ?header ?label from <urn:graph:cedar:raw-rdf> where {
-        ?header a tablink:RowProperty.
-        ?header rdfs:label ?label.
-        filter regex(?header, "DATASET", "i")
-        } """
-        results = self.sparql.run_select(query, query_params)
-        for result in results:
-            resource = URIRef(result['header']['value'])
-            headers[resource] = {}
-            headers[resource]['label'] = result['label']['value']
-        self.log.info("Process %d row properties" % len(headers))
-        
-        for (header, label) in headers.iteritems():
-            self.process_row_header(graph, dataset_uri, query_params, header, label)
+            # Get a list of all the column headers
+            headers = {}
+            query = """
+            select distinct * from <GRAPH> where {
+                ?header a TARGET.
+                ?header tablink:value ?label.
+                ?header tablink:sheet <SHEET>.
+            optional {
+                ?header tablink:parentCell ?parent.
+                ?parent a PARENT.
+                }
+            } """
+            results = self.sparql.run_select(query, query_params)
+            for result in results:
+                resource = URIRef(result['header']['value'])
+                headers[resource] = {}
+                headers[resource]['label'] = result['label']['value']
+                if 'parent' in result:
+                    headers[resource]['parent'] = URIRef(result['parent']['value'])
+                else:
+                    headers[resource]['parent'] = None
+                    
+            self.log.info("Process %d %s" % (len(headers), key['target']))
+            used_mappings = self.process_headers(graph, activity_URI, headers)
             
-        #####
-        # Done
-        #####
+        # Keep the end time
+        endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                            datatype=self.conf.getURI('xsd', 'dateTime'))
+        
+        # Finish describing the activity
+        graph.add((activity_URI,
+                   RDF.type,
+                   self.conf.getURI('prov', 'Activity')))
+        graph.add((activity_URI,
+                   self.conf.getURI('prov', 'startedAtTime'),
+                   startTime))
+        graph.add((activity_URI,
+                   self.conf.getURI('prov', 'endedAtTime'),
+                   endTime))
+        graph.add((activity_URI,
+                   self.conf.getURI('prov', 'wasAssociatedWith'),
+                   URIRef("https://github.com/CEDAR-project/Integrator")))
+        for dim_type in used_mappings:
+            target = self.codes.get_mapping_src_URI(dim_type)
+            if target != None:
+                graph.add((activity_URI,
+                           self.conf.getURI('prov', 'used'),
+                           target))
+        
         # Write the file to disk
         if len(graph) > 0:
             self.log.info("Saving {} rules triples.".format(len(graph)))
@@ -131,171 +219,114 @@ class RuleMaker(object):
                 graph.serialize(destination=out, format='n3')
                 out.close()
             except :
-                self.log.error("Whoops! Something went wrong in serializing to output file")
+                self.log.error("Whoops! Something went wrong in serialising to output file")
                 self.log.info(sys.exc_info())
         else:
             self.log.info("Nothing to save !")
-            
-    def process_row_header(self, graph, dataset_uri, query_params, header, label):
-        """
-        Process a row header. Get all the possible values and find a possible
-        best match
-        """
-        labels = []
-        query = """
-        select distinct ?label from <GRAPH> where {
-        ?obs a qb:Observation.
-        ?obs <DIM> ?label.
-        } order by ?label
-        """.replace('DIM', header)
-        results = self.sparql.run_select(query, query_params)
-        for result in results:
-            label = clean_string(result['label']['value'])
-            if 'totaal' not in label:
-                labels.append(label)
-        
-        # If there is no associated label forget about this header
-        if len(labels) == 0:
-            return
-        
-        # Create a small sample to detect the dimension
-        size = min(20, len(labels))
-        sample = [ labels[i] for i in sorted(random.sample(xrange(len(labels)), size))]
-        
+
+    def _map_to_date(self, value):
         # Tweak: try to see if we have a sample that correspond to years
         # see e.g. table VT_1859_02_H1
-        years = True
         try:
-            for entry in sample:
-                y = int(entry)
-                if y > 1971 or y < 1600:
-                    years = False
+            y = int(value)
+            if y > 1971 or y < 1600:
+                return (self.conf.getURI('cedar', 'birthYear'), Literal(y))
         except ValueError:
-            years = False
-        # if the column contains years it should be a birth year
-        if years:
-            for label in labels:
-                self.create_rule_set_value(graph, dataset_uri,
-                                           header, Literal(label), 
-                                           self.conf.getURI('cedar', 'birthYear'), Literal(label))
-            return
-        
-        # Check if we can find the dimension associated to this header
-        counts = {}
-        for entry in sample:
-            result = self.codes.detect_code(entry)
-            if result != None:
-                (dim, _) = result
-                counts.setdefault(dim, 0)
-                counts[dim] = counts[dim] + 1
-        
-        # If we can't find any possible match, skip this header        
-        if len(counts) == 0:
-            return
-        
-        # Get the dimension with the highest count
-        sorted_counts = sorted(counts.iteritems(), key=operator.itemgetter(1), reverse=True)
-        (dimension, _) = sorted_counts[0]
-                
-        # Tweak: jobPosition can not be in a hierarchical position
-        # verify that the header is not the sub header of something
-        # if dimension == self.conf.getURI('cedar','occupationPosition'):
-        #    sparql = SPARQLWrapper(self.endpoint)
-        #    query = """
-        #    ask from <GRAPH> {
-        #    <DIM> <http://example.org/ns#subPropertyOf> ?x.
-        #    } 
-        #    """.replace('GRAPH',self.namedgraph).replace('DIM', header)
-        #    sparql.setQuery(query)
-        #    sparql.setReturnFormat(JSON)
-        #    if sparql.query().convert()['boolean']:
-        #        return
-        
-        # Create a rule to bind the dimension to this header
-        for label in labels:
-            v = self.codes.get_code(dimension, label)
-            if v != None:
-                d = (dimension, v)
-                self.create_rule_set_value(graph, dataset_uri, header, Literal(label), d)
-        
-    def process_column_header(self, graph, dataset_uri, headers, header):
-        """
-        Process a column header
-        headers = set of all headers
-        header = target header
-        """
-        # Try to find if it's a "totaal"
-        header_with_total = self._contains_total(headers, header)
-        if header_with_total == None:
-            # The set of dimensions that will be filled in by detect_dimensions
-            dimensions = set()
-            
-            # Try to detect dimensions in this header and those above it
-            self.detect_dimensions(dimensions, headers, header)
-            
-            # Add all the results
-            for dimension in dimensions:
-                (_, dim) = dimension
-                target_dim = self.conf.getURI('tablink', 'dimension')
-                self.create_rule_set_value(graph, dataset_uri, target_dim, header, dim)
-        else:
-            # Add a rule to ignore this observation
-            target_dim = self.conf.getURI('tablink', 'dimension')
-            self.create_rule_ignore_observation(graph, dataset_uri, target_dim, header)
-                
+            return None
     
-    def detect_dimensions(self, dimensions, headers, header):
-        """
-        Check for known labels
-        """
-        # Get the data
-        data = headers[header]
-        
-        # Clean the label
-        label_clean = clean_string(data['label'])
-        
-        # Check if we can find something that is codified
-        result = self.codes.detect_code(label_clean)
-        if result != None:
-            dimensions.add((header, result))
-        
-        # Look for a birth year pattern
-        # TODO: two sets of numbers with the same difference and the second
-        # set higher than 1700
-        
-        # Recurse
-        parent = data['parent']
-        if parent in headers:
-            # Hot fix to skip vertical merge resulting in duplicate headers
-            while parent == header:
-                parent = headers[parent]['parent']
-            if parent in headers:
-                self.detect_dimensions(dimensions, headers, parent)
+    def _is_ignored(self, value):
+        if 'totaal' in value:
+            return True
+        return False
     
-    def _contains_total(self, headers, header):
-        """
-        Check if the header is about the total of something
-        """
-        # Get the data
-        data = headers[header]
+    def process_headers(self, graph, activity_URI, headers):
+        used_mappings = set()
         
-        # Clean the label
-        label_clean = clean_string(data['label'])
-        
-        # Check if the label contains the string "totaal"
-        if "totaal" in label_clean:
-            return header
-        
-        # Recurse to upper level
-        parent = data['parent']
-        if parent in headers:
-            # Hot fix to skip vertical merge resulting in duplicate headers
-            while parent == header:
-                parent = headers[parent]['parent']
-            if parent in headers:
-                return self._contains_total(headers, parent)
-        
-        return None
+        # Bag the headers according to their parents
+        header_bags = {}
+        for (header, data) in headers.iteritems():
+            parent = 'root' if data['parent'] == None else data['parent']
+            header_bags.setdefault(parent, {'content':[]})
+            header_bags[parent]['content'].append(header)
+            
+        # Build a map to assign a possible value to every header
+        header_mapping = {}
+        for (header, data) in headers.iteritems():
+            header_mapping[header] = {}
+            label = clean_string(data['label'])
+            
+            # See if we should maybe ignore this point, set a flag for it
+            data['ignore'] = self._is_ignored(label)
+            
+            if not data['ignore']:
+                # Try to map the value to a birth date
+                header_mapping[header]['birthdate'] = self._map_to_date(label)
+                
+                # Try to map the value to any other standard code
+                for map_type in self.codes.get_mapping_types():
+                    header_mapping[header][map_type] = self.codes.get_code_for(map_type, label)
+                
+        # Iterate over the bags and look for the most popular binding
+        for header_bag in header_bags.values():
+            total = {}
+            for header in header_bag['content']:
+                if not headers[header]['ignore']: 
+                    for (dimension_type, binding) in header_mapping[header].iteritems():
+                        total.setdefault(dimension_type, 0)
+                        if binding != None:
+                            total[dimension_type] = total[dimension_type] + 1
+            sorted_total = sorted(total.iteritems(), key=operator.itemgetter(1), reverse=True)
+            header_bag['best_match'] = None if len(sorted_total) == 0 else sorted_total[0]
+
+        # Annotate all the headers
+        for header_bag in header_bags.values():
+            for header in header_bag['content']:
+                if headers[header]['ignore']:
+                    # If the header is ignored annotate it with a specific dimension
+                    binding = (self.conf.getURI('cedar', 'ignore'), Literal("1"))
+                    self._annotate_header(graph, activity_URI, header, binding)
+                else:
+                    if header_bag['best_match'] != None:
+                        (dim_type, total) = header_bag['best_match']
+                        # See if we have enough confidence
+                        if total >= len(header_bag['content']) * 0.25:
+                            # See if we have a mapping for this header
+                            binding = header_mapping[header][dim_type]
+                            if binding != None:
+                                used_mappings.add(dim_type)
+                                self._annotate_header(graph, activity_URI, header, binding)
+                            
+        # Return the list of mappings used
+        return used_mappings
+
+    def _annotate_header(self, graph, activity_URI, header, binding):
+        resource = header + '-mapping'
+        body = resource + '-body'
+        (p, o) = binding
+        graph.add((resource,
+                   RDF.type,
+                   self.conf.getURI('oa', 'Annotation')))
+        graph.add((resource,
+                   self.conf.getURI('oa', 'hasTarget'),
+                   header))
+        graph.add((resource,
+                   self.conf.getURI('prov', 'wasGeneratedBy'),
+                   activity_URI))
+        graph.add((resource,
+                   self.conf.getURI('oa', 'serializedBy'),
+                   URIRef("https://github.com/CEDAR-project/Integrator")))
+        graph.add((resource,
+                   self.conf.getURI('oa', 'serializedAt'),
+                   Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.conf.getURI('xsd', 'date'))))
+        graph.add((resource,
+                   self.conf.getURI('oa', 'hasBody'),
+                   body))
+        graph.add((body,
+                   RDF.type,
+                   RDFS.Resource))
+        graph.add((body,
+                   p,
+                   o))
         
     def create_rule_set_value(self, graph, dataset_uri, target_dim, target_val, dimensionvalue):
         """
@@ -303,7 +334,7 @@ class RuleMaker(object):
         to all the observations having the targetDimension as a dimension
         """
         (dimension, value) = dimensionvalue
-        resource = self.conf.getURI('cedar', 'rule-'+str(uuid.uuid1()))
+        resource = self.conf.getURI('cedar', 'rule-' + str(uuid.uuid1()))
         graph.add((resource,
                    RDF.type,
                    self.conf.getURI('harmonizer', 'SetValue')))
@@ -334,25 +365,6 @@ class RuleMaker(object):
         Create a new harmonization rule that tells to ignore observations
         associated to the target dimension
         """
-        resource = self.conf.getURI('cedar', 'rule-'+str(uuid.uuid1()))
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('harmonizer', 'IgnoreObservation')))
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('harmonizer', 'HarmonizationRule')))
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('prov', 'Entity')))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'targetDimension'),
-                   target_dim))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'targetValue'),
-                   target_val))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'targetDataset'),
-                   URIRef(dataset_uri)))
         
 if __name__ == '__main__':
     # Configuration
@@ -360,7 +372,8 @@ if __name__ == '__main__':
     
     # Test
     # dataset_name = "http://cedar.example.org/resource/VT_1947_A1_T_S0"
-    dataset_name = "http://lod.cedar-project.nl:8888/cedar/resource/BRT_1930_07_S3_S0"
+    sheet_name = "http://lod.cedar-project.nl:8888/cedar/resource/BRT_1930_07_S3_S0"
+    sheet_name = "http://lod.cedar-project.nl:8888/cedar/resource/VT_1840_00_S6_S2"
     rulesMaker = RuleMaker(config)
-    rulesMaker.process(dataset_name, '/tmp/rule.ttl')
+    rulesMaker.process(sheet_name, '/tmp/rule.ttl')
     
