@@ -1,12 +1,12 @@
 #!/usr/bin/python2
 import json
-from common.sparql import SPARQLWrap
-from common.configuration import Configuration, RAW_XLS_PATH
-from jinja2 import Template
 import glob
 import os
-from xlrd import open_workbook
 import logging
+from common.sparql import SPARQLWrap
+from common.configuration import Configuration
+from jinja2 import Template
+from xlrd import open_workbook
 
 log = logging.getLogger("Stats")
 
@@ -19,9 +19,9 @@ class StatsGenerator(object):
     def __init__(self, config):
         self._conf = config
         self._sparql = SPARQLWrap(config)
-        self._params = {'RAW':'<urn:graph:cedar:raw-rdf>',
-                         'RULES':'<urn:graph:cedar:harmonization_rules>',
-                         'RELEASE' : '<urn:graph:cedar:harmonised_data>'}
+        self._params = {'RAW':config.get_graph_name('raw-data'),
+                         'RULES':config.get_graph_name('rules'),
+                         'RELEASE' : config.get_graph_name('release')}
 
     def get_numbers(self):
         output = {} 
@@ -125,7 +125,7 @@ class StatsGenerator(object):
         # Get the number of expected datasets
         log.info("Count the number of expected datasets")
         output['nb_datasets_expected'] = 0
-        raw_xls_files = glob.glob(config.getPath(RAW_XLS_PATH))
+        raw_xls_files = glob.glob('data/input/raw-xls')
         for raw_xls_file in sorted(raw_xls_files):
             name = os.path.basename(raw_xls_file).split('.')[0]
             wb = open_workbook(raw_xls_file, formatting_info=False, on_demand=True)

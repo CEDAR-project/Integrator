@@ -14,16 +14,21 @@ class Configuration(object):
             for (name, value) in self.config.items("namespaces"):
                 self.namespaces[name] = Namespace(value)
                 
-            # Set the logger level
+            # Set the logger level and format
             verbose = self.config.get('debug', 'verbose')
             self.logLevel = logging.DEBUG if verbose == "1" else logging.INFO
-            logging.basicConfig()
+            logFormat = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+            logging.basicConfig(format = logFormat)
+            
+            self.fh = logging.FileHandler('integrator.log', mode='w')
+            self.fh.setFormatter(logging.Formatter(logFormat))
         except :
             logging.error("Could not find configuration file")
     
     def getLogger(self, name):
         logger = logging.getLogger(name)
         logger.setLevel(self.logLevel)
+        logger.addHandler(self.fh)
         return logger
     
     def isCompress(self):

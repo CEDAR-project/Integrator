@@ -196,13 +196,11 @@ class CubeMaker(object):
         Process all the data cells in the target sheet and look for rules to
         harmonise them, save the output into outputfile_name
         """
-        # The graph that will be used to store the cube
-        graph = ConjunctiveGraph()
-        self.conf.bindNamespaces(graph)
-        
         # Get the name of the slice to use for these observations
         key = '_'.join(sheet_uri.split('/')[-1].split('_')[:2]) 
         slice_uri = self._harmonized_uri + '-slice-' + key
+        
+        # TODO: Make this call thread proof
         self._slices.add(slice_uri)
         
         # Fix the parameters for the SPARQL queries
@@ -234,16 +232,16 @@ class CubeMaker(object):
             ?mapping oa:hasTarget ?dimension.
             ?mapping oa:hasBody ?mapping_body.
             ?mapping_body ?dim ?val.
-            FILTER(?dim != rdf:type)
+            FILTER (?dim != rdf:type)
             BIND (xsd:decimal(?popcounts) as ?popcount) 
         }"""
-        observations_graph = self.sparql.run_construct(query, query_params)
-        for t in observations_graph.triples((None, None, None)):
+        graph = self.sparql.run_construct(query, query_params)
+        self.conf.bindNamespaces(graph)
+        for t in graph.triples((None, None, None)):
             (_,p,_) = t
             # Keep track of the dimensions found
             if p not in self.no_dim:
                 self._dimensions.add(p)
-            graph.add(t)
                 
         # Write the file to disk
         if len(graph) > 0:
@@ -267,7 +265,8 @@ if __name__ == '__main__':
     # BRT_1889_05_T5_S0 -> 221 obs
     # VT_1947_A1_T
     # BRT_1889_05_T4_S0
-    sheet_uri = config.getURI('cedar', 'BRT_1889_03_T1_S0')
+    # BRT_1889_03_T1_S0 <- Huge one! (1163477 triples)
+    sheet_uri = config.getURI('cedar', 'BRT_1889_05_T4_S0')
 
     # Test
     cube = CubeMaker(config)
