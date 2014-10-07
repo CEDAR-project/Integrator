@@ -88,95 +88,40 @@ class TabLink(object):
         markingURI = root + self.markingFileName
         
         # Describe the data set
-        self.graph.add((datasetURI,
-                        RDF.type,
-                        self.conf.getURI('dcat', 'DataSet')
-                        ))
-        self.graph.add((datasetURI,
-                        RDFS.label,
-                        Literal(self.basename)
-                        ))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('prov', 'wasDerivedFrom'),
-                        srcURI
-                        ))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('prov', 'wasGeneratedBy'),
-                        activityURI
-                        ))
+        self.graph.add((datasetURI,RDF.type,self.conf.getURI('dcat', 'DataSet')))
+        self.graph.add((datasetURI,RDFS.label,Literal(self.basename)))
+        self.graph.add((datasetURI,self.conf.getURI('prov', 'wasDerivedFrom'),srcURI))
+        self.graph.add((datasetURI,self.conf.getURI('prov', 'wasGeneratedBy'),activityURI))
         for sheetURI in sheetURIs:
-            self.graph.add((datasetURI,
-                            self.conf.getURI('dcterms', 'hasPart'),
-                            sheetURI
-                            ))
-        self.graph.add((datasetURI,
-                        self.conf.getURI('dcat', 'distribution'),
-                        distURI
-                        ))
-        self.graph.add((distURI,
-                        RDF.type,
-                        self.conf.getURI('dcat', 'Distribution')
-                        ))
-        self.graph.add((distURI,
-                        RDFS.label,
-                        Literal(os.path.basename(self.dataFileName))
-                        ))
-        self.graph.add((distURI,
-                        self.conf.getURI('dcterms', 'title'),
-                        Literal(os.path.basename(self.dataFileName))
-                        ))
-        self.graph.add((distURI,
-                        self.conf.getURI('dcterms', 'accessURL'),
-                        datasetDumpURI
-                        ))
-            
+            self.graph.add((datasetURI,self.conf.getURI('dcterms', 'hasPart'),sheetURI))
+        self.graph.add((datasetURI,self.conf.getURI('dcat', 'distribution'),distURI))
+        
+        # Describe the distribution of the dataset
+        self.graph.add((distURI,RDF.type,self.conf.getURI('dcat', 'Distribution')))
+        dumpname = os.path.basename(self.dataFileName)
+        if self.conf.isCompress():
+            dumpname = dumpname + '.bz2'
+        self.graph.add((distURI,RDFS.label,Literal(dumpname)))
+        self.graph.add((distURI,self.conf.getURI('dcterms', 'accessURL'),datasetDumpURI))
+        
         # Describe the source of the dataset
-        self.graph.add((srcURI,
-                        RDF.type,
-                        self.conf.getURI('dcat', 'DataSet')
-                        ))
-        self.graph.add((srcURI,
-                        self.conf.getURI('dcterms', 'title'),
-                        Literal(os.path.basename(self.excelFileName))
-                        ))
-        self.graph.add((srcURI,
-                        self.conf.getURI('dcat', 'distribution'),
-                        srcdistURI
-                        ))
-        self.graph.add((srcdistURI,
-                        RDF.type,
-                        self.conf.getURI('dcat', 'Distribution')
-                        ))
-        self.graph.add((srcdistURI,
-                        RDFS.label,
-                        Literal(os.path.basename(self.excelFileName))
-                        ))
-        self.graph.add((srcdistURI,
-                        self.conf.getURI('dcterms', 'accessURL'),
-                        excelFileURI
-                        ))
+        self.graph.add((srcURI,RDF.type,self.conf.getURI('dcat', 'DataSet')))
+        self.graph.add((srcURI,RDFS.label,Literal(os.path.basename(self.excelFileName))))
+        self.graph.add((srcURI,self.conf.getURI('dcat', 'distribution'),srcdistURI))
+        self.graph.add((srcURI,self.conf.getURI('tablink', 'sheets'),Literal(self.wb.nsheets)))
+        
+        # Describe the distribution of the source of the dataset
+        self.graph.add((srcdistURI,RDF.type,self.conf.getURI('dcat', 'Distribution')))
+        self.graph.add((srcdistURI,RDFS.label,Literal(os.path.basename(self.excelFileName))))
+        self.graph.add((srcdistURI,self.conf.getURI('dcterms', 'accessURL'),excelFileURI))
         
         # The activity is the conversion process
-        self.graph.add((activityURI,
-                        RDF.type,
-                        self.conf.getURI('prov', 'Activity')
-                        ))
-        self.graph.add((activityURI,
-                        self.conf.getURI('prov', 'startedAtTime'),
-                        startTime
-                        ))
-        self.graph.add((activityURI,
-                        self.conf.getURI('prov', 'endedAtTime'),
-                        endTime
-                        ))
-        self.graph.add((activityURI,
-                        self.conf.getURI('prov', 'wasAssociatedWith'),
-                        self.conf.getURI('tablink', "tabLink")
-                        ))
-        self.graph.add((activityURI,
-                        self.conf.getURI('prov', 'used'),
-                        markingURI
-                        ))
+        self.graph.add((activityURI,RDF.type,self.conf.getURI('prov', 'Activity')))
+        self.graph.add((activityURI,self.conf.getURI('prov', 'startedAtTime'),startTime))
+        self.graph.add((activityURI,self.conf.getURI('prov', 'endedAtTime'),endTime))
+        self.graph.add((activityURI,self.conf.getURI('prov', 'wasAssociatedWith'),self.conf.getURI('tablink', "tabLink")))
+        self.graph.add((activityURI,self.conf.getURI('prov', 'used'),markingURI))
+        self.graph.add((activityURI,self.conf.getURI('prov', 'used'),srcdistURI))
         
         # Save the graph
         self.log.info("Saving {} data triples.".format(len(self.graph)))
