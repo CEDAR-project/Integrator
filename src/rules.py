@@ -39,7 +39,7 @@ class Codes(object):
             'mappings' : 'data/input/mapping/occupation_position.csv'
         }
         self.mappings['occupation'] = {
-            'predicate' : self.conf.getURI('cedar', 'occupation'),
+            'predicate' : self.conf.getURI('hisco', 'occupation'),
             'mappings' : 'data/input/mapping/occupation.csv'
         }
         self.mappings['belief'] = {
@@ -200,6 +200,9 @@ class RuleMaker(object):
         graph.add((activity_URI,
                    RDF.type,
                    self.conf.getURI('prov', 'Activity')))
+        graph.add((activity_URI,
+                   RDFS.label,
+                   Literal("Annotate the sheet cedar:" + sheet_uri.split('/')[-1])))
         graph.add((activity_URI,
                    self.conf.getURI('prov', 'startedAtTime'),
                    startTime))

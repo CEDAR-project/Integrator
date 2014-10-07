@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 def go():
     # Load credentials (login first line, password second line)
-    credentials = [c.strip() for c in open('credentials.txt')]
+    credentials = [c.strip() for c in open('credentials-easy.txt')]
     
     br = mechanize.Browser()
     br.open("https://easy.dans.knaw.nl/ui/home")

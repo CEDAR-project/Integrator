@@ -1,9 +1,9 @@
 "Literal",Code
-"v",http://purl.org/linked-data/sdmx/2009/code#sex-V
-"vrouw",http://purl.org/linked-data/sdmx/2009/code#sex-V
-"vrouwen",http://purl.org/linked-data/sdmx/2009/code#sex-V
-"vrouwelijk geslacht",http://purl.org/linked-data/sdmx/2009/code#sex-V
-"vrouwelijk",http://purl.org/linked-data/sdmx/2009/code#sex-V
+"v",http://purl.org/linked-data/sdmx/2009/code#sex-F
+"vrouw",http://purl.org/linked-data/sdmx/2009/code#sex-F
+"vrouwen",http://purl.org/linked-data/sdmx/2009/code#sex-F
+"vrouwelijk geslacht",http://purl.org/linked-data/sdmx/2009/code#sex-F
+"vrouwelijk",http://purl.org/linked-data/sdmx/2009/code#sex-F
 "m",http://purl.org/linked-data/sdmx/2009/code#sex-M
 "man",http://purl.org/linked-data/sdmx/2009/code#sex-M
 "mannen",http://purl.org/linked-data/sdmx/2009/code#sex-M
