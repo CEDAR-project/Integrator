@@ -35,7 +35,7 @@ class Codes(object):
             'mappings' : 'data/input/mapping/marital_status.csv'
         }
         self.mappings['occupationPosition'] = {
-            'predicate' : self.conf.getURI('cedar', 'occupationPosition'),
+            'predicate' : self.conf.getURI('cedarterms', 'occupationPosition'),
             'mappings' : 'data/input/mapping/occupation_position.csv'
         }
         self.mappings['occupation'] = {
@@ -43,7 +43,7 @@ class Codes(object):
             'mappings' : 'data/input/mapping/occupation.csv'
         }
         self.mappings['belief'] = {
-            'predicate' : self.conf.getURI('cedar', 'belief'),
+            'predicate' : self.conf.getURI('cedarterms', 'belief'),
             'mappings' : 'data/input/mapping/belief.csv'
         }
         self.mappings['city'] = {
@@ -215,10 +215,16 @@ class RuleMaker(object):
         for dim_type in used_mappings:
             target = self.codes.get_mapping_src_URI(dim_type)
             if target != None:
-                graph.add((activity_URI,
-                           self.conf.getURI('prov', 'used'),
-                           target))
+                targetURI = self.conf.getURI('cedar', target.split('/')[-1])
+                
+                # Add a link to the target
+                graph.add((activity_URI,self.conf.getURI('prov', 'used'),targetURI))
         
+                # Describe the target
+                graph.add((targetURI,RDF.type,self.conf.getURI('dcat', 'Distribution')))
+                graph.add((targetURI,RDFS.label, Literal(target.split('/')[-1])))
+                graph.add((targetURI,self.conf.getURI('dcterms', 'accessURL'), target))
+                                 
         # Write the file to disk
         if len(graph) > 0:
             self.log.info("Saving {} rules triples.".format(len(graph)))
@@ -291,7 +297,7 @@ class RuleMaker(object):
             for header in header_bag['content']:
                 if headers[header]['ignore']:
                     # If the header is ignored annotate it with a specific dimension
-                    binding = (self.conf.getURI('cedar', 'ignore'), Literal("1"))
+                    binding = (self.conf.getURI('cedarterms', 'ignore'), Literal("1"))
                     self._annotate_header(graph, activity_URI, header, binding)
                 else:
                     if header_bag['best_match'] != None:
@@ -315,6 +321,8 @@ class RuleMaker(object):
                    RDF.type,
                    self.conf.getURI('oa', 'Annotation')))
         graph.add((resource,
+                   RDFS.label,Literal("Annotation for %s" % header.split('_')[-1])))
+        graph.add((resource,
                    self.conf.getURI('oa', 'hasTarget'),
                    header))
         graph.add((resource,
@@ -329,12 +337,12 @@ class RuleMaker(object):
         graph.add((resource,
                    self.conf.getURI('oa', 'hasBody'),
                    body))
-        graph.add((body,
-                   RDF.type,
-                   RDFS.Resource))
-        graph.add((body,
-                   p,
-                   o))
+        
+        # Describe the annotation body
+        label = 'Set %s to %s' % (p.split('#')[-1], o.split('#')[-1])
+        graph.add((body,RDF.type,RDFS.Resource))
+        graph.add((body,RDFS.label,Literal(label)))
+        graph.add((body,p,o))
         
     def create_rule_set_value(self, graph, dataset_uri, target_dim, target_val, dimensionvalue):
         """
