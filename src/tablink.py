@@ -29,7 +29,7 @@ class TabLink(object):
         Constructor
         """
         self.conf = conf
-        self.log = conf.getLogger("TabLinker")
+        self.log = conf.getLogger("TabLink")
         self.excelFileName = excelFileName
         self.markingFileName = markingFileName
         self.dataFileName = dataFileName
@@ -85,7 +85,8 @@ class TabLink(object):
         if self.conf.isCompress():
             datasetDumpURI = datasetDumpURI + '.bz2' 
         excelFileURI = root + self.excelFileName
-        markingURI = root + self.markingFileName
+        markingFileNameURI = root + self.markingFileName
+        markingURI = self.conf.getURI('cedar', self.markingFileName.split('/')[-1].split('.')[0] + '-marking-dist')
         
         # Describe the data set
         self.graph.add((datasetURI,RDF.type,self.conf.getURI('dcat', 'DataSet')))
@@ -122,6 +123,11 @@ class TabLink(object):
         self.graph.add((activityURI,self.conf.getURI('prov', 'wasAssociatedWith'),self.conf.getURI('tablink', "tabLink")))
         self.graph.add((activityURI,self.conf.getURI('prov', 'used'),markingURI))
         self.graph.add((activityURI,self.conf.getURI('prov', 'used'),srcdistURI))
+
+        # Describe the marking file as distribution
+        self.graph.add((markingURI,RDF.type,self.conf.getURI('dcat', 'Distribution')))
+        self.graph.add((markingURI,RDFS.label, Literal(markingFileNameURI.split('/')[-1])))
+        self.graph.add((markingURI,self.conf.getURI('dcterms', 'accessURL'), markingFileNameURI))
         
         # Save the graph
         self.log.info("Saving {} data triples.".format(len(self.graph)))
@@ -144,7 +150,7 @@ class TabLink(object):
         self.log.info(self.basename + ":Parsing {0} rows and {1} columns in sheet \"{2}\"".format(rowns, colns, sheet.name))
         
         # Define a sheetURI for the current sheet
-        sheetURI = self.conf.getURI('cedar', "{0}_S{1}".format(self.basename, n))
+        sheetURI = self.conf.getURI('cedar', "{0}-S{1}".format(self.basename, n))
         
         # Describe the sheet
         self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
@@ -178,7 +184,7 @@ class TabLink(object):
                     # Is empty ?
                     'isEmpty' : self.isEmpty(sheet.cell(i, j)),
                     # Compose a resource name for the cell
-                    'URI' : URIRef("{0}_{1}".format(sheetURI, cellname(i, j))),
+                    'URI' : URIRef("{0}-{1}".format(sheetURI, cellname(i, j))),
                     # Pass on the URI of the data set
                     'sheetURI' : sheetURI
                 }
@@ -475,20 +481,19 @@ class TabLink(object):
         return True
     
     def _createCell(self, cell, cell_type):
-        # It's an observation
+        # It's a cell and an entity
         self.graph.add((cell['URI'], RDF.type, cell_type))
-        
-        # and an entity we can use in provenance tracking
         # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('prov', 'Entity')))
         
         # It's in the data set defined by the current sheet
         self.graph.add((cell['URI'], self.conf.getURI('tablink', 'sheet'), cell['sheetURI']))
         
         # Add its value (removed the datatype=XSD.decimal because we can't be sure)
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(cell['value'])))
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(str(cell['value']))))
         
-        # Add its cell name
-        self.graph.add((cell['URI'], self.conf.getURI('rdfs', 'label'), Literal(cell['name'])))
+        # Add a cell label
+        label = "Cell %s=%s" % (cell['name'], cell['value'])
+        self.graph.add((cell['URI'], RDFS.label, Literal(label)))
         
 if __name__ == '__main__':
     config = Configuration('config.ini')
