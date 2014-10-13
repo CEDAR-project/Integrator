@@ -18,9 +18,16 @@ RAW_RDF_PATH = "data/output/raw-rdf/"  # The raw RDF for the marked XLS
 H_RULES_PATH = "data/output/rules/"  # The harmonisation rules
 RELEASE_PATH = "data/output/release/"  # The released data set
 
-def get_datasets_list(config):
+config = Configuration('config.ini')
+log = config.getLogger("Main")
+
+
+def get_datasets_list():
+    global config
+    global log
+    
     datasets = []
-    sparql = SPARQLWrap(config)
+    sparql = SPARQLWrap()
     query = """
     select distinct ?ds from <%s> where {
     ?ds a tablink:Sheet.
@@ -31,10 +38,13 @@ def get_datasets_list(config):
         datasets.append(sparql.format(result['ds']))
     return datasets
 
-def generate_raw_rdf(config, log):
+def generate_raw_rdf():
     '''
     Convert the raw xls files into raw RDF data cubes
     '''
+    global config
+    global log
+    
     # Prepare a task list
     tasks = []
     
@@ -53,27 +63,26 @@ def generate_raw_rdf(config, log):
                 dataFileCheck = dataFileCheck + '.bz2'
             if (not os.path.exists(dataFileCheck)) or config.isOverwrite():
                 task = {'name':name,
-                        'config':config,
                         'raw_xls_file':raw_xls_file,
                         'marking_file':marking_file,
-                        'dataFile':dataFile,
-                        'log':log}
+                        'dataFile':dataFile}
                 tasks.append(task)
     
     # Call tablinker in parallel
-    pool_size = multiprocessing.cpu_count() * 2
+    pool_size = multiprocessing.cpu_count() * 3
     pool = multiprocessing.Pool(processes=pool_size)
     pool.map(generate_raw_rdf_thread, tasks)
     pool.close()
     pool.join()
     
 def generate_raw_rdf_thread(parameters):
+    global config
+    global log
+    
     name = parameters['name']
     raw_xls_file = parameters['raw_xls_file']
     marking_file = parameters['marking_file']
-    config = parameters['config']
     dataFile = parameters['dataFile']
-    log = parameters['log']
     try:
         log.info("Calling tablinker for %s" % name)
         tLinker = TabLink(config, raw_xls_file, marking_file, dataFile)
@@ -81,10 +90,13 @@ def generate_raw_rdf_thread(parameters):
     except:
         log.error("Can not process %s" % name)
     
-def generate_harmonization_rules(config, log):
+def generate_harmonization_rules():
     '''
     Generate harmonization rules
     '''
+    global config
+    global log
+    
     # Prepare a task list
     tasks = []
     
@@ -92,7 +104,7 @@ def generate_harmonization_rules(config, log):
     for dataset in get_datasets_list(config):
         name = dataset.split('/')[-1]
         output = H_RULES_PATH + '/' + name + '.ttl'
-        task = {'dataset' : dataset, 'output' : output, 'log' : log}
+        task = {'dataset' : dataset, 'output' : output}
         tasks.append(task)
     
     # Call rules maker in parallel, avoid hammering the store too much
@@ -102,18 +114,23 @@ def generate_harmonization_rules(config, log):
     pool.join()
     
 def generate_harmonization_rules_thread(parameters):
+    global config
+    global log
+    
     dataset = parameters['dataset']
     output = parameters['output']
-    log = parameters['log']
     log.info("Process " + dataset.n3())
     rulesMaker = RuleMaker(config)
     rulesMaker.process(dataset, output)
         
-def create_harmonized_dataset(config, log):
+def create_harmonized_dataset():
     '''
     Get a list of data set to be processed and try to harmonised them into
     one big cube
     '''
+    global config
+    global log
+    
     # Prepare a task list
     tasks = []
     
@@ -127,8 +144,7 @@ def create_harmonized_dataset(config, log):
         if (not os.path.exists(data_file_check)) or config.isOverwrite():
             task = {'dataset' : dataset,
                     'data_file' : data_file,
-                    'cube' : cube,
-                    'log' : log}
+                    'cube' : cube}
             tasks.append(task)
 
     # Call cube in parallel, avoid hammering the store too much
@@ -141,8 +157,10 @@ def create_harmonized_dataset(config, log):
     cube.save_data(RELEASE_PATH + 'extra.ttl')
     
 def create_harmonized_dataset_thread(parameters):
+    global config
+    global log
+    
     cube = parameters['cube']
-    log = parameters['log']
     dataset = parameters['dataset']
     data_file = parameters['data_file']
     try:
@@ -151,10 +169,13 @@ def create_harmonized_dataset_thread(parameters):
     except:
         log.error("Can not process %s" % dataset.n3())
     
-def push_to_virtuoso(config, named_graph, directory):
+def push_to_virtuoso(named_graph, directory):
     '''
     Push data to virtuoso
     '''
+    global config
+    global log
+    
     pusher = Pusher(config.get_SPARQL())
     log.info("Clean " + named_graph)
     pusher.clean_graph(named_graph)
@@ -162,9 +183,6 @@ def push_to_virtuoso(config, named_graph, directory):
     pusher.upload_directory(named_graph, directory)
 
 if __name__ == '__main__':
-    config = Configuration('config.ini')
-    log = config.getLogger("Main")
-
     # Create the output paths if necessary
     if not os.path.exists(RAW_RDF_PATH):
         os.makedirs(RAW_RDF_PATH)
@@ -174,20 +192,20 @@ if __name__ == '__main__':
         os.makedirs(RELEASE_PATH)
         
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
-    # generate_raw_rdf(config, log)
+    generate_raw_rdf()
     
     # Step 2 : push all the raw rdf to the triple store
-    # push_to_virtuoso(config, config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
+    push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
     
     # Step 3 : generate harmonisation rules
-    # generate_harmonization_rules(config, log)
+    generate_harmonization_rules()
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    # push_to_virtuoso(config, config.get_graph_name('rules'), H_RULES_PATH + '/*')
+    push_to_virtuoso(config.get_graph_name('rules'), H_RULES_PATH + '/*')
     
     # Step 5 : get the observations from all the cube and try to harmonize them
-    create_harmonized_dataset(config, log)
+    create_harmonized_dataset()
     
     # Step 6 : push the harmonized data and all additional files to the release
-    push_to_virtuoso(config, config.get_graph_name('release'), RELEASE_PATH + '/*')
+    push_to_virtuoso(config.get_graph_name('release'), RELEASE_PATH + '/*')
     
