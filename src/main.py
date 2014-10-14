@@ -101,7 +101,7 @@ def generate_harmonization_rules():
     tasks = []
     
     # Prepare to process each data set
-    for dataset in get_datasets_list(config):
+    for dataset in get_datasets_list():
         name = dataset.split('/')[-1]
         output = H_RULES_PATH + '/' + name + '.ttl'
         task = {'dataset' : dataset, 'output' : output}
@@ -192,10 +192,10 @@ if __name__ == '__main__':
         os.makedirs(RELEASE_PATH)
         
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
-    generate_raw_rdf()
+    #generate_raw_rdf()
     
     # Step 2 : push all the raw rdf to the triple store
-    push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
+    #push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
     
     # Step 3 : generate harmonisation rules
     generate_harmonization_rules()
