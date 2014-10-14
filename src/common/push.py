@@ -83,7 +83,7 @@ class Pusher(object):
             input_file.close()
                         
             # Send everything !
-            pool_size = 4  # Try to still not hammer Virtuoso too much
+            pool_size = 8  # Try to still not hammer Virtuoso too much
             pool = multiprocessing.Pool(processes=pool_size)
             pool.map(_push_chunk_thread, tasks)
             pool.close()
