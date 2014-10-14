@@ -27,7 +27,7 @@ def get_datasets_list():
     global log
     
     datasets = []
-    sparql = SPARQLWrap()
+    sparql = SPARQLWrap(config)
     query = """
     select distinct ?ds from <%s> where {
     ?ds a tablink:Sheet.
