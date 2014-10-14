@@ -135,7 +135,7 @@ def create_harmonized_dataset():
     tasks = []
     
     cube = CubeMaker(config)
-    for dataset in get_datasets_list(config):
+    for dataset in get_datasets_list():
         name = dataset.split('/')[-1]
         data_file = RELEASE_PATH + name + '.ttl'
         data_file_check = data_file
