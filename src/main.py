@@ -6,6 +6,7 @@ import multiprocessing
 from common.configuration import Configuration
 from common.push import Pusher
 from common.sparql import SPARQLWrap
+
 from tablink import TabLink
 from rules import RuleMaker
 from cubes import CubeMaker
@@ -20,7 +21,7 @@ RELEASE_PATH = "data/output/release/"  # The released data set
 
 config = Configuration('config.ini')
 log = config.getLogger("Main")
-
+cubeMaker = None
 
 def get_datasets_list():
     global config
@@ -130,11 +131,12 @@ def create_harmonized_dataset():
     '''
     global config
     global log
+    global cubeMaker
     
     # Prepare a task list
     tasks = []
     
-    cube = CubeMaker(config)
+    cubeMaker = CubeMaker(config)
     for dataset in get_datasets_list():
         name = dataset.split('/')[-1]
         data_file = RELEASE_PATH + name + '.ttl'
@@ -143,8 +145,7 @@ def create_harmonized_dataset():
             data_file_check = data_file_check + '.bz2'
         if (not os.path.exists(data_file_check)) or config.isOverwrite():
             task = {'dataset' : dataset,
-                    'data_file' : data_file,
-                    'cube' : cube}
+                    'data_file' : data_file}
             tasks.append(task)
 
     # Call cube in parallel, avoid hammering the store too much
@@ -154,18 +155,18 @@ def create_harmonized_dataset():
     pool.join()
     
     log.info("Save additional data")
-    cube.save_data(RELEASE_PATH + 'extra.ttl')
+    cubeMaker.save_data(RELEASE_PATH + 'extra.ttl')
     
 def create_harmonized_dataset_thread(parameters):
     global config
     global log
+    global cubeMaker
     
-    cube = parameters['cube']
     dataset = parameters['dataset']
     data_file = parameters['data_file']
     try:
         log.info("Process " + dataset.n3())
-        cube.process(dataset, data_file)
+        cubeMaker.process(dataset, data_file)
     except:
         log.error("Can not process %s" % dataset.n3())
     
@@ -198,10 +199,10 @@ if __name__ == '__main__':
     #push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
     
     # Step 3 : generate harmonisation rules
-    generate_harmonization_rules()
+    #generate_harmonization_rules()
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    push_to_virtuoso(config.get_graph_name('rules'), H_RULES_PATH + '/*')
+    #push_to_virtuoso(config.get_graph_name('rules'), H_RULES_PATH + '/*')
     
     # Step 5 : get the observations from all the cube and try to harmonize them
     create_harmonized_dataset()
