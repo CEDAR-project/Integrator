@@ -1,39 +1,17 @@
 #!/usr/bin/python2
 import bz2
 import sys
-import thread
-import threading
     
 from rdflib import ConjunctiveGraph, Literal, RDF
 from common.configuration import Configuration
 from common.sparql import SPARQLWrap
 from rdflib.namespace import XSD, RDFS
 from rdflib.term import URIRef
+from multiprocessing import Lock
 
 # TODO: If the value is not an int mark the point as being ignored
 # TODO: When getting the RDF model from the construct, look for dimensions used
 # TODO: Add a nice label for the slice
-
-#---------------------------------------------------------------------------
-#   Thread-related stuff - copy & pasted from logging
-#---------------------------------------------------------------------------
-_lock = threading.RLock()
-
-def _acquireLock():
-    """
-    Acquire the module-level lock for serializing access to shared data.
-
-    This should be released with _releaseLock().
-    """
-    if _lock:
-        _lock.acquire()
-
-def _releaseLock():
-    """
-    Release the module-level lock acquired by calling _acquireLock().
-    """
-    if _lock:
-        _lock.release()
 
 class CubeMaker(object):
     def __init__(self, configuration):
@@ -43,6 +21,9 @@ class CubeMaker(object):
         # Keep parameters
         self.conf = configuration
 
+        # Create a lock
+        self.lock = Lock()
+        
         # Get a logger
         self.log = configuration.getLogger("CubeMaker")
         
@@ -67,6 +48,14 @@ class CubeMaker(object):
         self.no_dim.append(self.conf.getURI('qb','observation'))
         self.no_dim.append(self.conf.getURI('cedar','population'))
         
+    
+    def _add_slice(self, slice_uri):
+        '''
+        Register a new slice. Use a lock to support threaded calls
+        '''
+        with self.lock:
+            self._slices.add(slice_uri)
+            
     def save_data(self, output_file):
         '''
         Save all additional files into ttl files. Contains data that span
@@ -215,11 +204,6 @@ class CubeMaker(object):
         except :
             self.log.error("Whoops! Something went wrong in serializing to output file")
             self.log.info(sys.exc_info())
-    
-    def _add_slice(self, slice_uri):
-        _acquireLock()
-        self._slices.add(slice_uri)
-        _lock.release()
         
     def process(self, sheet_uri, output_file):        
         """
