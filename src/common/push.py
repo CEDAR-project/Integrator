@@ -42,52 +42,51 @@ class Pusher(object):
         r = requests.post(self.sparql, auth=(self.user, self.pas), data={'query' : query})
         print r.status_code
     
-    def upload_directory(self, graph_uri, directory):
-        for input_file in sorted(glob.glob(directory)):
-            # First remove the last BUFFER        
-            if os.path.isfile(BUFFER):
-                os.unlink(BUFFER)
-            
-            # Serialise the triples as ntriples in BUFFER
-            if input_file.endswith('.bz2'):
-                f = open(BUFFER + '-unzip', 'wb')
-                f.write(bz2.BZ2File(input_file).read())
-                f.close()
-                subprocess.call("rapper -i guess -o ntriples " + BUFFER + '-unzip > ' + BUFFER, stderr=sys.stdout, shell=True)
-            else:
-                subprocess.call("rapper -i guess -o ntriples " + input_file + ' > ' + BUFFER, stderr=sys.stdout, shell=True) 
-            
-            # Load all the data into chunks
-            tasks = []
-            chunk = ""
-            input_file = open(BUFFER, 'rb')            
-            count = 0
-            for triple in input_file.readlines():
-                chunk = chunk + triple
-                count = count + 1
-                # If we reach the max, store the chunk
-                if count == MAX_NT:
-                    tasks.append({"chunk": chunk,
-                                  "graph_uri":graph_uri,
-                                  "sparql": self.sparql,
-                                  "user": self.user,
-                                  "pas": self.pas})
-                    count = 0
-                    chunk = ""
-            # Store the last chunk
-            tasks.append({"chunk": chunk, 
-                          "graph_uri":graph_uri,
-                          "sparql": self.sparql,
-                          "user": self.user,
-                          "pas": self.pas})
-            input_file.close()
-                        
-            # Send everything !
-            pool_size = 8  # Try to still not hammer Virtuoso too much
-            pool = multiprocessing.Pool(processes=pool_size)
-            pool.map(_push_chunk_thread, tasks)
-            pool.close()
-            pool.join()
+    def upload_file(self, graph_uri, input_file):
+        # First remove the last BUFFER        
+        if os.path.isfile(BUFFER):
+            os.unlink(BUFFER)
+        
+        # Serialise the triples as ntriples in BUFFER
+        if input_file.endswith('.bz2'):
+            f = open(BUFFER + '-unzip', 'wb')
+            f.write(bz2.BZ2File(input_file).read())
+            f.close()
+            subprocess.call("rapper -i guess -o ntriples " + BUFFER + '-unzip > ' + BUFFER, stderr=sys.stdout, shell=True)
+        else:
+            subprocess.call("rapper -i guess -o ntriples " + input_file + ' > ' + BUFFER, stderr=sys.stdout, shell=True) 
+        
+        # Load all the data into chunks
+        tasks = []
+        chunk = ""
+        input_file = open(BUFFER, 'rb')            
+        count = 0
+        for triple in input_file.readlines():
+            chunk = chunk + triple
+            count = count + 1
+            # If we reach the max, store the chunk
+            if count == MAX_NT:
+                tasks.append({"chunk": chunk,
+                              "graph_uri":graph_uri,
+                              "sparql": self.sparql,
+                              "user": self.user,
+                              "pas": self.pas})
+                count = 0
+                chunk = ""
+        # Store the last chunk
+        tasks.append({"chunk": chunk, 
+                      "graph_uri":graph_uri,
+                      "sparql": self.sparql,
+                      "user": self.user,
+                      "pas": self.pas})
+        input_file.close()
+                    
+        # Send everything !
+        pool_size = 8  # Try to still not hammer Virtuoso too much
+        pool = multiprocessing.Pool(processes=pool_size)
+        pool.map(_push_chunk_thread, tasks)
+        pool.close()
+        pool.join()
                         
         
 if __name__ == '__main__':

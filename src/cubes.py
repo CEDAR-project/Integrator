@@ -7,12 +7,12 @@ from common.configuration import Configuration
 from common.sparql import SPARQLWrap
 from rdflib.namespace import XSD, RDFS
 from rdflib.term import URIRef
-from multiprocessing import Lock
-import logging
+import requests
 
 # TODO: If the value is not an int mark the point as being ignored
 # TODO: When getting the RDF model from the construct, look for dimensions used
 # TODO: Add a nice label for the slice
+# TODO: Look at http://docs.python-requests.org/en/latest/user/quickstart/#raw-response-content for directly save query output
 
 class CubeMaker(object):
     def __init__(self, configuration):
@@ -22,23 +22,11 @@ class CubeMaker(object):
         # Keep parameters
         self.conf = configuration
 
-        # Create a lock
-        self.lock = Lock()
-        
         # Get a logger
         self.log = configuration.getLogger("CubeMaker")
         
-        # Create a wrapper for SPARQL queries
-        self.sparql = SPARQLWrap(self.conf)
-        
         # The URI of the harmonised data set
-        self._ds_uri = configuration.getURI('cedar','harmonized-data') 
-        
-        # Keep a list of slices
-        self._slices = set()
-
-        # Keep a set of all the dimensions encountered
-        self._dimensions = set()
+        self._ds_uri = configuration.getURI('cedar','harmonised-data') 
         
         # This is a list of things that are not dimensions        
         self.no_dim = []
@@ -48,16 +36,8 @@ class CubeMaker(object):
         self.no_dim.append(self.conf.getURI('prov','used'))
         self.no_dim.append(self.conf.getURI('qb','observation'))
         self.no_dim.append(self.conf.getURI('cedarterms','population'))
-        
-    
-    def _add_slice(self, slice_uri):
-        '''
-        Register a new slice. Use a lock to support threaded calls
-        '''
-        with self.lock:
-            self._slices.add(slice_uri)
             
-    def save_data(self, output_file):
+    def generate_dsd(self, output_file):
         '''
         Save all additional files into ttl files. Contains data that span
         over all the processed raw cubes
@@ -71,37 +51,55 @@ class CubeMaker(object):
         graph.add((self._ds_uri,RDF.type,self.conf.getURI('prov','Entity')))
         graph.add((self._ds_uri,self.conf.getURI('dcterms','title'),Literal("Harmonised census data 1795-1971")))
         graph.add((self._ds_uri,self.conf.getURI('rdfs','label'),Literal("Harmonised census data 1795-1971")))
-        for s in self._slices:
-            graph.add((self._ds_uri,self.conf.getURI('qb','slice'),s))
-            
+        
         # Finish describing the slices
         slicestruct_uri = self._ds_uri + '-sliced-by-type-and-year'
         graph.add((slicestruct_uri,RDF.type,self.conf.getURI('qb','SliceKey')))
         graph.add((slicestruct_uri,RDFS.label,Literal("Slice by census type and census year")))
         graph.add((slicestruct_uri,self.conf.getURI('qb','componentProperty'),self.conf.getURI('cedar','censusType')))
         graph.add((slicestruct_uri,self.conf.getURI('qb','componentProperty'),self.conf.getURI('sdmx-dimension','refPeriod')))
-        for s in self._slices:
-            (census_type,census_year) = s.split('-')[-1].split('_')
-            graph.add((s,RDF.type,self.conf.getURI('qb','Slice')))
-            graph.add((s,self.conf.getURI('sdmx-dimension','refPeriod'),Literal(int(census_year))))
-            graph.add((s,self.conf.getURI('cedar','censusType'),Literal(census_type)))
-            graph.add((s,self.conf.getURI('qb','sliceStructure'),slicestruct_uri))
 
+        # Get the list of slices and add them
+        query = """
+        select distinct ?slice from <RELEASE> where {
+            ?slice qb:observation [a qb:Observation].
+        }"""
+        sparql = SPARQLWrap(self.conf)
+        results = sparql.run_select(query, {'RELEASE' : self.conf.get_graph_name('release')})
+        for result in results:
+            sliceURI = URIRef(result['slice']['value'])
+            graph.add((self._ds_uri,self.conf.getURI('qb','slice'),sliceURI))
+            (census_type,census_year) = sliceURI.split('-')[-1].split('_')
+            graph.add((sliceURI,RDF.type,self.conf.getURI('qb','Slice')))
+            graph.add((sliceURI,RDFS.label,Literal("Slice for census type/year %s/%s" % (census_type,census_year))))
+            graph.add((sliceURI,self.conf.getURI('sdmx-dimension','refPeriod'),Literal(int(census_year))))
+            graph.add((sliceURI,self.conf.getURI('cedarterms','censusType'),Literal(census_type)))
+            graph.add((sliceURI,self.conf.getURI('qb','sliceStructure'),slicestruct_uri))
+            
         # Create a DSD
         dsd = self._ds_uri + '-dsd'
         graph.add((self._ds_uri,self.conf.getURI('qb','structure'),dsd))
         graph.add((dsd,RDF.type,self.conf.getURI('qb','DataStructureDefinition')))
         graph.add((dsd,self.conf.getURI('sdmx-attribute','unitMeasure'),URIRef('http://dbpedia.org/resource/Natural_number')))
         ## dimensions
-        ### all the encountered dimensions
         order = 1
-        for dim in self._dimensions:
-            dim_uri = dsd + "-dimension-" + str(order)
-            graph.add((dim_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
-            graph.add((dsd,self.conf.getURI('qb','component'),dim_uri))
-            graph.add((dim_uri,self.conf.getURI('qb','dimension'),dim))
-            graph.add((dim_uri,self.conf.getURI('qb','order'),Literal(order)))
-            order = order + 1
+        ### all the encountered dimensions
+        query = """
+        select distinct ?dimension from <RELEASE> where {
+            ?obs a qb:Observation.
+            ?obs ?dimension [].
+        }"""
+        sparql = SPARQLWrap(self.conf)
+        results = sparql.run_select(query, {'RELEASE' : self.conf.get_graph_name('release')})
+        for result in results:
+            dimURI = URIRef(result['dimension']['value'])
+            if dimURI not in self.no_dim:
+                dim_uri = dsd + "-dimension-" + str(order)
+                graph.add((dim_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
+                graph.add((dsd,self.conf.getURI('qb','component'),dim_uri))
+                graph.add((dim_uri,self.conf.getURI('qb','dimension'),dimURI))
+                graph.add((dim_uri,self.conf.getURI('qb','order'),Literal(order)))
+                order = order + 1
         ### the ref period used in the slices
         dim_uri = dsd + "-dimension-" + str(order)
         graph.add((dim_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
@@ -114,7 +112,7 @@ class CubeMaker(object):
         dim_uri = dsd + "-dimension-" + str(order)
         graph.add((dim_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
         graph.add((dsd,self.conf.getURI('qb','component'),dim_uri))
-        graph.add((dim_uri,self.conf.getURI('qb','dimension'),self.conf.getURI('cedar','censusType')))
+        graph.add((dim_uri,self.conf.getURI('qb','dimension'),self.conf.getURI('cedarterms','censusType')))
         graph.add((dim_uri,self.conf.getURI('qb','order'),Literal(order)))
         graph.add((dim_uri,self.conf.getURI('qb','componentAttachment'),self.conf.getURI('qb','Slice')))
         order = order + 1
@@ -122,7 +120,7 @@ class CubeMaker(object):
         measure_uri = dsd + "-measure"
         graph.add((dsd, self.conf.getURI('qb','component'), measure_uri))
         graph.add((measure_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
-        graph.add((measure_uri, self.conf.getURI('qb','measure'), self.conf.getURI('cedar', 'population')))
+        graph.add((measure_uri, self.conf.getURI('qb','measure'), self.conf.getURI('cedarterms', 'population')))
         
         ## attributes
         attr_uri = dsd + "-attribute"
@@ -145,7 +143,7 @@ class CubeMaker(object):
         
         self.log.info("Saving {} extra data triples.".format(len(graph)))
         try :
-            out = bz2.BZ2File(output_file + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(output_file, "w")
+            out = bz2.BZ2File(output_file + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(output_file, "wb")
             graph.serialize(destination=out, format='n3')
             out.close()
         except :
@@ -160,7 +158,6 @@ class CubeMaker(object):
         # Get the name of the slice to use for these observations
         key = '_'.join(sheet_uri.split('/')[-1].split('_')[:2]) 
         slice_uri = self._ds_uri + '-slice-' + key
-        self._add_slice(slice_uri)
         
         # Fix the parameters for the SPARQL queries
         query_params = {'SHEET'    : sheet_uri,
@@ -168,8 +165,7 @@ class CubeMaker(object):
                         'RAW-DATA' : self.conf.get_graph_name('raw-data'),
                         'RULES'    : self.conf.get_graph_name('rules')}
         
-        # Execute the SPARQL construct
-        logging.basicConfig(level=logging.DEBUG)
+        # Prepare the SPARQL construct
         query = """
         CONSTRUCT {
             <SLICE> qb:observation `iri(bif:concat(?cell,"-h"))`.
@@ -196,42 +192,38 @@ class CubeMaker(object):
             FILTER (?dim != rdf:type)
             BIND (xsd:decimal(?popcounts) as ?popcount) 
         }"""
-        graph = self.sparql.run_construct(query, query_params)
-        #graph = ConjunctiveGraph()
-        self.conf.bindNamespaces(graph)
-        for t in graph.triples((None, None, None)):
-            (_,p,_) = t
+        for (k,v) in query_params.iteritems():
+                query = query.replace(k,v)
+        query = self.conf.get_prefixes() + query
+        
+        # Launch the query and stream back the output to the file
+        server = self.conf.get_SPARQL()
+        creds = [c.strip() for c in open('credentials-virtuoso.txt')]
+        r = requests.post(server, auth=(creds[0], creds[1]), data={'query' : query}, stream=True)
+        out = bz2.BZ2File(output_file + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(output_file, "wb")
+        for chunk in r.iter_content(2048):
+            out.write(chunk)
+        out.close() 
+        
+        #graph = self.sparql.run_construct(query, query_params)
+        #self.conf.bindNamespaces(graph)
+        #for t in graph.triples((None, None, None)):
+        #    (_,p,_) = t
             # Keep track of the dimensions found
-            if p not in self.no_dim:
-                self._dimensions.add(p)
-                
-        # Write the file to disk
-        if len(graph) > 0:
-            self.log.info("Saving {} data triples.".format(len(graph)))
-            try :
-                out = bz2.BZ2File(output_file + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(output_file, "w")
-                graph.serialize(destination=out, format='n3')
-                out.close()
-            except :
-                self.log.error("Whoops! Something went wrong in serializing to output file")
-                self.log.info(sys.exc_info())
-        else:
-            self.log.info("Nothing to save !")
-    
+        #    if p not in self.no_dim:
+        #        self._dimensions.add(p)    
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
     
     # Set the name of a data set to test
-    # BRT_1889_05_T4_S0 -> 43 obs
-    # BRT_1889_05_T5_S0 -> 221 obs
-    # VT_1947_A1_T
-    # BRT_1889_05_T4_S0
-    # BRT_1889_03_T1_S0 <- Huge one! (1163477 triples)
+    # BRT_1889_05_T4-S0
+    # BRT_1899_03_T-S0 <- Too big ?
+    # BRT_1909_02A1_T1-S1 is broken
     sheet_uri = config.getURI('cedar', 'BRT_1889_05_T4-S0')
 
     # Test
     cube = CubeMaker(config)
     cube.process(sheet_uri, "/tmp/data.ttl")
-    cube.save_data("/tmp/extra.ttl")
+    cube.generate_dsd("/tmp/extra.ttl")
     

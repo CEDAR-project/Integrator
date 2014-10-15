@@ -21,7 +21,6 @@ RELEASE_PATH = "data/output/release/"  # The released data set
 
 config = Configuration('config.ini')
 log = config.getLogger("Main")
-cubeMaker = None
 
 def get_datasets_list():
     global config
@@ -131,12 +130,16 @@ def create_harmonized_dataset():
     '''
     global config
     global log
-    global cubeMaker
     
+    # Erase previous DSD
+    dsd_file = RELEASE_PATH + 'extra.ttl'
+    if config.isCompress():
+        dsd_file = dsd_file + '.bz2'
+    if os.path.exists(dsd_file):
+        os.remove(dsd_file)
+        
     # Prepare a task list
     tasks = []
-    
-    cubeMaker = CubeMaker(config)
     for dataset in get_datasets_list():
         name = dataset.split('/')[-1]
         data_file = RELEASE_PATH + name + '.ttl'
@@ -153,22 +156,27 @@ def create_harmonized_dataset():
     pool.map(create_harmonized_dataset_thread, tasks)
     pool.close()
     pool.join()
-    
-    log.info("Save additional data")
-    cubeMaker.save_data(RELEASE_PATH + 'extra.ttl')
-    
+        
 def create_harmonized_dataset_thread(parameters):
     global config
     global log
-    global cubeMaker
     
     dataset = parameters['dataset']
     data_file = parameters['data_file']
     try:
         log.info("Process " + dataset.n3())
+        cubeMaker = CubeMaker(config)
         cubeMaker.process(dataset, data_file)
     except:
         log.error("Can not process %s" % dataset.n3())
+
+def update_dsd():
+    global log
+    
+    log.info("Create the DSD")
+    cubeMaker = CubeMaker(config)
+    cubeMaker.generate_dsd(RELEASE_PATH + 'extra.ttl')
+    
     
 def push_to_virtuoso(named_graph, directory):
     '''
@@ -180,8 +188,17 @@ def push_to_virtuoso(named_graph, directory):
     pusher = Pusher(config.get_SPARQL())
     log.info("Clean " + named_graph)
     pusher.clean_graph(named_graph)
+    
     log.info("Push the content of " + directory)
-    pusher.upload_directory(named_graph, directory)
+    for input_file in sorted(glob.glob(directory)):
+        log.info("Push " + input_file)
+        pusher.upload_file(named_graph, input_file)
+
+
+def add_to_virtuoso(named_graph, input_file):
+    pusher = Pusher(config.get_SPARQL())
+    log.info("Push " + input_file)
+    pusher.upload_file(named_graph, input_file)
 
 if __name__ == '__main__':
     # Create the output paths if necessary
@@ -210,3 +227,6 @@ if __name__ == '__main__':
     # Step 6 : push the harmonized data and all additional files to the release
     push_to_virtuoso(config.get_graph_name('release'), RELEASE_PATH + '/*')
     
+    # Step 7 : update the cube DSD and push it
+    update_dsd()
+    add_to_virtuoso(config.get_graph_name('release'), RELEASE_PATH + '/extra.ttl.bz2')
