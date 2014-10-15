@@ -1,5 +1,4 @@
 #!/usr/bin/python2
-import uuid
 import bz2
 import operator
 import logging
@@ -197,21 +196,11 @@ class RuleMaker(object):
                             datatype=self.conf.getURI('xsd', 'dateTime'))
         
         # Finish describing the activity
-        graph.add((activity_URI,
-                   RDF.type,
-                   self.conf.getURI('prov', 'Activity')))
-        graph.add((activity_URI,
-                   RDFS.label,
-                   Literal("Annotate the sheet cedar:" + sheet_uri.split('/')[-1])))
-        graph.add((activity_URI,
-                   self.conf.getURI('prov', 'startedAtTime'),
-                   startTime))
-        graph.add((activity_URI,
-                   self.conf.getURI('prov', 'endedAtTime'),
-                   endTime))
-        graph.add((activity_URI,
-                   self.conf.getURI('prov', 'wasAssociatedWith'),
-                   URIRef("https://github.com/CEDAR-project/Integrator")))
+        graph.add((activity_URI,RDF.type,self.conf.getURI('prov', 'Activity')))
+        graph.add((activity_URI,RDFS.label,Literal("Annotate cedar:" + sheet_uri.split('/')[-1])))
+        graph.add((activity_URI,self.conf.getURI('prov', 'startedAtTime'),startTime))
+        graph.add((activity_URI,self.conf.getURI('prov', 'endedAtTime'),endTime))
+        graph.add((activity_URI,self.conf.getURI('prov', 'wasAssociatedWith'),URIRef("https://github.com/CEDAR-project/Integrator")))
         for dim_type in used_mappings:
             target = self.codes.get_mapping_src_URI(dim_type)
             if target != None:
@@ -317,79 +306,27 @@ class RuleMaker(object):
         resource = header + '-mapping'
         body = resource + '-body'
         (p, o) = binding
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('oa', 'Annotation')))
-        graph.add((resource,
-                   RDFS.label,Literal("Annotation for %s" % header.split('_')[-1])))
-        graph.add((resource,
-                   self.conf.getURI('oa', 'hasTarget'),
-                   header))
-        graph.add((resource,
-                   self.conf.getURI('prov', 'wasGeneratedBy'),
-                   activity_URI))
-        graph.add((resource,
-                   self.conf.getURI('oa', 'serializedBy'),
-                   URIRef("https://github.com/CEDAR-project/Integrator")))
-        graph.add((resource,
-                   self.conf.getURI('oa', 'serializedAt'),
-                   Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.conf.getURI('xsd', 'date'))))
-        graph.add((resource,
-                   self.conf.getURI('oa', 'hasBody'),
-                   body))
+        graph.add((resource,RDF.type,self.conf.getURI('oa', 'Annotation')))
+        label = 'Set %s to %s' % (p.split('#')[-1], o.split('#')[-1])
+        graph.add((resource,RDFS.label,Literal(label)))
+        graph.add((resource,self.conf.getURI('oa', 'hasTarget'),header))
+        graph.add((resource,self.conf.getURI('prov', 'wasGeneratedBy'),activity_URI))
+        graph.add((resource,self.conf.getURI('oa', 'serializedBy'),URIRef("https://github.com/CEDAR-project/Integrator")))
+        graph.add((resource,self.conf.getURI('oa', 'serializedAt'),Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.conf.getURI('xsd', 'date'))))
+        graph.add((resource,self.conf.getURI('oa', 'hasBody'),body))
         
         # Describe the annotation body
-        label = 'Set %s to %s' % (p.split('#')[-1], o.split('#')[-1])
         graph.add((body,RDF.type,RDFS.Resource))
-        graph.add((body,RDFS.label,Literal(label)))
         graph.add((body,p,o))
-        
-    def create_rule_set_value(self, graph, dataset_uri, target_dim, target_val, dimensionvalue):
-        """
-        Create a new harmonization rule that assign a dimension and value
-        to all the observations having the targetDimension as a dimension
-        """
-        (dimension, value) = dimensionvalue
-        resource = self.conf.getURI('cedar', 'rule-' + str(uuid.uuid1()))
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('harmonizer', 'SetValue')))
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('harmonizer', 'HarmonizationRule')))
-        graph.add((resource,
-                   RDF.type,
-                   self.conf.getURI('prov', 'Entity')))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'targetDimension'),
-                   target_dim))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'targetValue'),
-                   target_val))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'targetDataset'),
-                   URIRef(dataset_uri)))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'dimension'),
-                   dimension))
-        graph.add((resource,
-                   self.conf.getURI('harmonizer', 'value'),
-                   value))    
-        
-    def create_rule_ignore_observation(self, graph, dataset_uri, target_dim, target_val):
-        """
-        Create a new harmonization rule that tells to ignore observations
-        associated to the target dimension
-        """
-        
+                
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
     
     # Test
     # dataset_name = "http://cedar.example.org/resource/VT_1947_A1_T_S0"
-    sheet_name = "http://lod.cedar-project.nl:8888/cedar/resource/BRT_1930_07_S3_S0"
-    sheet_name = "http://lod.cedar-project.nl:8888/cedar/resource/VT_1840_00_S6_S2"
+    sheet_name = "http://lod.cedar-project.nl:8888/cedar/resource/BRT_1930_07_S3-S0"
+    sheet_name = "http://lod.cedar-project.nl:8888/cedar/resource/VT_1840_00_S6-S2"
     rulesMaker = RuleMaker(config)
     rulesMaker.process(sheet_name, '/tmp/rule.ttl')
     

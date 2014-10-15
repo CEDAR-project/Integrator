@@ -46,7 +46,7 @@ class CubeMaker(object):
         self.no_dim.append(self.conf.getURI('prov','wasGeneratedBy'))
         self.no_dim.append(self.conf.getURI('prov','used'))
         self.no_dim.append(self.conf.getURI('qb','observation'))
-        self.no_dim.append(self.conf.getURI('cedar','population'))
+        self.no_dim.append(self.conf.getURI('cedarterms','population'))
         
     
     def _add_slice(self, slice_uri):
@@ -226,11 +226,12 @@ class CubeMaker(object):
         CONSTRUCT {
             <SLICE> qb:observation `iri(bif:concat(?cell,"-h"))`.
             `iri(bif:concat(?cell,"-h"))` a qb:Observation;
-                cedar:population ?popcount;
+                cedarterms:population ?popcount;
                 ?dim ?val;
                 prov:wasDerivedFrom ?cell;
                 prov:wasGeneratedBy `iri(bif:concat(?cell,"-activity"))`.
             `iri(bif:concat(?cell,"-activity"))` a prov:Activity;
+                rdfs:label "Harmonise";
                 prov:used ?mapping.
         } 
         FROM <RAW-DATA>
@@ -278,7 +279,7 @@ if __name__ == '__main__':
     # VT_1947_A1_T
     # BRT_1889_05_T4_S0
     # BRT_1889_03_T1_S0 <- Huge one! (1163477 triples)
-    sheet_uri = config.getURI('cedar', 'BRT_1889_05_T4_S0')
+    sheet_uri = config.getURI('cedar', 'BRT_1889_05_T4-S0')
 
     # Test
     cube = CubeMaker(config)
