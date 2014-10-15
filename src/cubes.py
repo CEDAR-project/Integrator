@@ -8,6 +8,7 @@ from common.sparql import SPARQLWrap
 from rdflib.namespace import XSD, RDFS
 from rdflib.term import URIRef
 from multiprocessing import Lock
+import logging
 
 # TODO: If the value is not an int mark the point as being ignored
 # TODO: When getting the RDF model from the construct, look for dimensions used
@@ -66,110 +67,56 @@ class CubeMaker(object):
         self.conf.bindNamespaces(graph)
         
         # Create the data set
-        graph.add((self._ds_uri,
-                   RDF.type,
-                   self.conf.getURI('qb','DataSet')))
-        graph.add((self._ds_uri,
-                   RDF.type,
-                   self.conf.getURI('prov','Entity')))
-        graph.add((self._ds_uri,
-                   self.conf.getURI('dcterms','title'),
-                   Literal("Harmonised census data 1795-1971")))
-        graph.add((self._ds_uri,
-                   self.conf.getURI('rdfs','label'),
-                   Literal("Harmonised census data 1795-1971")))
+        graph.add((self._ds_uri,RDF.type,self.conf.getURI('qb','DataSet')))
+        graph.add((self._ds_uri,RDF.type,self.conf.getURI('prov','Entity')))
+        graph.add((self._ds_uri,self.conf.getURI('dcterms','title'),Literal("Harmonised census data 1795-1971")))
+        graph.add((self._ds_uri,self.conf.getURI('rdfs','label'),Literal("Harmonised census data 1795-1971")))
         for s in self._slices:
-            graph.add((self._ds_uri,
-                       self.conf.getURI('qb','slice'),
-                       s))
+            graph.add((self._ds_uri,self.conf.getURI('qb','slice'),s))
             
         # Finish describing the slices
         slicestruct_uri = self._ds_uri + '-sliced-by-type-and-year'
-        graph.add((slicestruct_uri,
-                   RDF.type,
-                   self.conf.getURI('qb','SliceKey')))
-        graph.add((slicestruct_uri,
-                   RDFS.label,
-                   Literal("Slice by census type and census year")))
-        graph.add((slicestruct_uri,
-                   self.conf.getURI('qb','componentProperty'),
-                   self.conf.getURI('cedar','censusType')))
-        graph.add((slicestruct_uri,
-                   self.conf.getURI('qb','componentProperty'),
-                   self.conf.getURI('sdmx-dimension','refPeriod')))
+        graph.add((slicestruct_uri,RDF.type,self.conf.getURI('qb','SliceKey')))
+        graph.add((slicestruct_uri,RDFS.label,Literal("Slice by census type and census year")))
+        graph.add((slicestruct_uri,self.conf.getURI('qb','componentProperty'),self.conf.getURI('cedar','censusType')))
+        graph.add((slicestruct_uri,self.conf.getURI('qb','componentProperty'),self.conf.getURI('sdmx-dimension','refPeriod')))
         for s in self._slices:
             (census_type,census_year) = s.split('-')[-1].split('_')
-            graph.add((s,
-                       RDF.type,
-                       self.conf.getURI('qb','Slice')))
-            graph.add((s,
-                       self.conf.getURI('sdmx-dimension','refPeriod'),
-                       Literal(int(census_year))))
-            graph.add((s,
-                       self.conf.getURI('cedar','censusType'),
-                       Literal(census_type)))
-            graph.add((s,
-                       self.conf.getURI('qb','sliceStructure'),
-                       slicestruct_uri))
+            graph.add((s,RDF.type,self.conf.getURI('qb','Slice')))
+            graph.add((s,self.conf.getURI('sdmx-dimension','refPeriod'),Literal(int(census_year))))
+            graph.add((s,self.conf.getURI('cedar','censusType'),Literal(census_type)))
+            graph.add((s,self.conf.getURI('qb','sliceStructure'),slicestruct_uri))
 
         # Create a DSD
         dsd = self._ds_uri + '-dsd'
-        graph.add((self._ds_uri,
-                   self.conf.getURI('qb','structure'),
-                   dsd))
-        graph.add((dsd,
-                   RDF.type,
-                   self.conf.getURI('qb','DataStructureDefinition')))
-        graph.add((dsd,
-                   self.conf.getURI('sdmx-attribute','unitMeasure'),
-                   URIRef('http://dbpedia.org/resource/Natural_number')))
+        graph.add((self._ds_uri,self.conf.getURI('qb','structure'),dsd))
+        graph.add((dsd,RDF.type,self.conf.getURI('qb','DataStructureDefinition')))
+        graph.add((dsd,self.conf.getURI('sdmx-attribute','unitMeasure'),URIRef('http://dbpedia.org/resource/Natural_number')))
         ## dimensions
         ### all the encountered dimensions
         order = 1
         for dim in self._dimensions:
             dim_uri = dsd + "-dimension-" + str(order)
             graph.add((dim_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
-            graph.add((dsd,
-                       self.conf.getURI('qb','component'),
-                       dim_uri))
-            graph.add((dim_uri,
-                       self.conf.getURI('qb','dimension'),
-                       dim))
-            graph.add((dim_uri,
-                       self.conf.getURI('qb','order'),
-                       Literal(order)))
+            graph.add((dsd,self.conf.getURI('qb','component'),dim_uri))
+            graph.add((dim_uri,self.conf.getURI('qb','dimension'),dim))
+            graph.add((dim_uri,self.conf.getURI('qb','order'),Literal(order)))
             order = order + 1
         ### the ref period used in the slices
         dim_uri = dsd + "-dimension-" + str(order)
         graph.add((dim_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
-        graph.add((dsd,
-                   self.conf.getURI('qb','component'),
-                   dim_uri))
-        graph.add((dim_uri,
-                   self.conf.getURI('qb','dimension'),
-                   self.conf.getURI('sdmx-dimension','refPeriod')))
-        graph.add((dim_uri,
-                   self.conf.getURI('qb','order'),
-                   Literal(order)))
-        graph.add((dim_uri,
-                   self.conf.getURI('qb','componentAttachment'),
-                   self.conf.getURI('qb','Slice')))
+        graph.add((dsd,self.conf.getURI('qb','component'),dim_uri))
+        graph.add((dim_uri,self.conf.getURI('qb','dimension'),self.conf.getURI('sdmx-dimension','refPeriod')))
+        graph.add((dim_uri,self.conf.getURI('qb','order'),Literal(order)))
+        graph.add((dim_uri,self.conf.getURI('qb','componentAttachment'),self.conf.getURI('qb','Slice')))
         order = order + 1
         ### the census type used in the slices
         dim_uri = dsd + "-dimension-" + str(order)
         graph.add((dim_uri, RDF.type, self.conf.getURI('qb','ComponentSpecification')))
-        graph.add((dsd,
-                   self.conf.getURI('qb','component'),
-                   dim_uri))
-        graph.add((dim_uri,
-                   self.conf.getURI('qb','dimension'),
-                   self.conf.getURI('cedar','censusType')))
-        graph.add((dim_uri,
-                   self.conf.getURI('qb','order'),
-                   Literal(order)))
-        graph.add((dim_uri,
-                   self.conf.getURI('qb','componentAttachment'),
-                   self.conf.getURI('qb','Slice')))
+        graph.add((dsd,self.conf.getURI('qb','component'),dim_uri))
+        graph.add((dim_uri,self.conf.getURI('qb','dimension'),self.conf.getURI('cedar','censusType')))
+        graph.add((dim_uri,self.conf.getURI('qb','order'),Literal(order)))
+        graph.add((dim_uri,self.conf.getURI('qb','componentAttachment'),self.conf.getURI('qb','Slice')))
         order = order + 1
         ## measure
         measure_uri = dsd + "-measure"
@@ -222,6 +169,7 @@ class CubeMaker(object):
                         'RULES'    : self.conf.get_graph_name('rules')}
         
         # Execute the SPARQL construct
+        logging.basicConfig(level=logging.DEBUG)
         query = """
         CONSTRUCT {
             <SLICE> qb:observation `iri(bif:concat(?cell,"-h"))`.
@@ -249,6 +197,7 @@ class CubeMaker(object):
             BIND (xsd:decimal(?popcounts) as ?popcount) 
         }"""
         graph = self.sparql.run_construct(query, query_params)
+        #graph = ConjunctiveGraph()
         self.conf.bindNamespaces(graph)
         for t in graph.triples((None, None, None)):
             (_,p,_) = t

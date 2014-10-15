@@ -1,5 +1,4 @@
 from SPARQLWrapper import SPARQLWrapper, JSON
-from SPARQLWrapper.Wrapper import RDF, N3
 from rdflib.term import URIRef, Literal
 
 class SPARQLWrap(object):
