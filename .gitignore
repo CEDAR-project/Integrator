@@ -57,8 +57,7 @@ coverage.xml
 docs/_build/
 .project
 .pydevproject
-.project
-.pydevproject
+
 
 # Credentials
 credentials-virtuoso.txt
