@@ -60,8 +60,7 @@ docs/_build/
 .project
 .pydevproject
 
-# Output
-data/output
+# Credentials
 credentials-virtuoso.txt
-credentials.txt
+credentials-easy.txt
 
