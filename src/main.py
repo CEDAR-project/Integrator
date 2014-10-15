@@ -196,6 +196,9 @@ def push_to_virtuoso(named_graph, directory):
 
 
 def add_to_virtuoso(named_graph, input_file):
+    global config
+    global log
+    
     pusher = Pusher(config.get_SPARQL())
     log.info("Push " + input_file)
     pusher.upload_file(named_graph, input_file)
