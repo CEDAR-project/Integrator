@@ -1,6 +1,7 @@
 #!/usr/bin/python2
 
 import requests
+import subprocess
 from systemd import journal
 
 SPARQL = "http://lod.cedar-project.nl/cedar/sparql"
