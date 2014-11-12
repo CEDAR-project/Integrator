@@ -1,5 +1,5 @@
-from ConfigParser import SafeConfigParser
 import logging
+from ConfigParser import SafeConfigParser
 from rdflib.namespace import Namespace
 
 class Configuration(object):
