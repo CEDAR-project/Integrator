@@ -1,0 +1,22 @@
+    # Load the file for the houses
+    mappings = {}
+    with open('./data/input/mapping/Housing Classification', 'rb') as csvfile:
+        reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+        for row in reader:
+            table = row[0].replace('http://lod.cedar-project.nl/resource/v2/', '')
+            label = row[1]
+            key = (table, label)
+            codes = [head for head in row[2:] if head != '']
+            mapping = {'codes':codes, 'table':table}
+            mappings[key] = mapping
+    
+    with open('housing_types.csv', 'wb') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for line in output:
+            dataset = line[0]
+            value = line[1]
+            key = (dataset, value)
+            if key in mappings:
+                for code in mappings[key]['codes']:
+                    line.append(code)
+            writer.writerow(line)
