@@ -1,0 +1,100 @@
+@prefix cedar: <http://cedar.example.org/resource/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix harmonizer: <http://example.org/ns/harmonizer#> .
+@prefix np: <http://www.nanopub.org/nschema#> .
+@prefix oa: <http://www.w3.org/ns/openannotation/core/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix qb: <http://purl.org/linked-data/cube#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rules: <http://rules.example.org/resource/> .
+@prefix sdmx-code: <http://purl.org/linked-data/sdmx/2009/code#> .
+@prefix sdmx-dimension: <http://purl.org/linked-data/sdmx/2009/dimension#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix tablink: <http://example.org/ns/tablink#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+cedar:BRT_1909_02A1_T1_S0_A3 a tablink:RowProperty,
+        qb:DimensionProperty ;
+    rdfs:label "Volgnummer" ;
+    tablink:cell "A3" .
+
+cedar:BRT_1909_02A1_T1_S0_A7 a tablink:ColumnHeader,
+        qb:DimensionProperty ;
+    rdfs:label "1.0" ;
+    tablink:cell "A7" .
+
+cedar:BRT_1909_02A1_T1_S0_AA1006 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "Kerkschilders" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "D" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "1.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1007 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "Glasbranders en -schilders" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "A" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "1.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1009 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "Glasbranders en -schilders" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "D" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "1.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1012 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "Plateelschilders" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "D" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "1.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1029 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "VII b. Totaal" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "A" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "2.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1030 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "VII b. Totaal" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "B" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "0.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1031 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "VII b. Totaal" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "C" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "0.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1032 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "VII b. Totaal" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "D" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "4.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .
+
+cedar:BRT_1909_02A1_T1_S0_AA1042 a qb:Observation,
+        prov:Entity ;
+    cedar:BRT_1909_02A1_T1_S0_B3 "VIII c. Totaal" ;
+    cedar:BRT_1909_02A1_T1_S0_C3 "A" ;
+    tablink:dimension cedar:BRT_1909_02A1_T1_S0_AA7 ;
+    tablink:value "0.0" ;
+    qb:dataSet cedar:BRT_1909_02A1_T1_S0 .

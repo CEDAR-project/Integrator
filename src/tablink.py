@@ -444,46 +444,17 @@ class TabLink(object):
         Returns:
         True/False -- depending on whether the cell is empty
         """
+        
         return (cell.ctype == XL_CELL_EMPTY or cell.ctype == XL_CELL_BLANK or cell.value == '')
         
-    def isEmptyRow(self, i, colns):
-        """
-        Determine whether the row 'i' is empty by iterating over all its cells
-        
-        Arguments:
-        i     -- The index of the row to be checked.
-        colns -- The number of columns to be checked
-        
-        Returns:
-        true  -- if the row is empty
-        false -- if the row is not empty
-        """
-        for j in range(0, colns) :
-            if not self.isEmpty(i, j):
-                return False
-        return True
-    
-    def isEmptyColumn(self, j, rowns):
-        """
-        Determine whether the column 'j' is empty by iterating over all its cells
-        
-        Arguments:
-        j     -- The index of the column to be checked.
-        rowns -- The number of rows to be checked
-        
-        Returns:
-        true  -- if the column is empty
-        false -- if the column is not empty
-        """
-        for i in range(0, rowns) :
-            if not self.isEmpty(i, j):
-                return False
-        return True
     
     def _createCell(self, cell, cell_type):
-        # It's a cell and an entity
+        """
+        Create a new cell
+        """
+        
+        # It's a cell
         self.graph.add((cell['URI'], RDF.type, cell_type))
-        # self.graph.add((cell['URI'], RDF.type, self.conf.getURI('prov', 'Entity')))
         
         # It's in the data set defined by the current sheet
         self.graph.add((cell['URI'], self.conf.getURI('tablink', 'sheet'), cell['sheetURI']))
