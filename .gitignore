@@ -1,0 +1,5 @@
+.project
+.pydevproject
+credentials-easy.txt
+credentials-virtuoso.txt
+*.pyc
