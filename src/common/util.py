@@ -6,13 +6,11 @@ def clean_string(text):
     Utility function to clean a string
     TODO speed this up
     """
-    # Remove some extra things
-    text_clean = text.replace('.', ' ').replace('_', ' ').lower()
-    # Remove new lines
-    text_clean = text_clean.replace('\n', ' ').replace('\r', ' ')
+    # Lower and remove new lines
+    text_clean = text.lower().replace('\n', ' ').replace('\r', ' ')
     # Shrink spaces
     text_clean = re.sub(r'\s+', ' ', text_clean)
-    # Remove lead and trailing whitespaces
+    # Remove lead and trailing whitespace
     text_clean = text_clean.strip()
     return text_clean
 

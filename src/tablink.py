@@ -5,6 +5,7 @@ Convert Excel files with matching style into RDF cubes
 Code derived from TabLinker
 """
 from xlutils.margins import number_of_good_cols, number_of_good_rows
+from xlutils.styles import Styles
 from xlrd import open_workbook, XL_CELL_EMPTY, XL_CELL_BLANK, cellname
 from rdflib import ConjunctiveGraph, Literal, RDF, URIRef
 import re
@@ -16,6 +17,7 @@ import pprint
 
 import sys
 from common.configuration import Configuration
+from common import util
 from rdflib.namespace import RDFS
 reload(sys)
 import traceback
@@ -24,14 +26,13 @@ sys.setdefaultencoding("utf8")  # @UndefinedVariable
 pp = pprint.PrettyPrinter(indent=2)
 
 class TabLink(object):
-    def __init__(self, conf, excelFileName, markingFileName, dataFileName, processAnnotations = False):
+    def __init__(self, conf, excelFileName, dataFileName, processAnnotations = False):
         """
         Constructor
         """
         self.conf = conf
         self.log = conf.getLogger("TabLink")
         self.excelFileName = excelFileName
-        self.markingFileName = markingFileName
         self.dataFileName = dataFileName
         self.processAnnotations = processAnnotations
          
@@ -45,14 +46,9 @@ class TabLink(object):
         self.log.debug('Loading Excel file {0}'.format(excelFileName))
         self.wb = open_workbook(excelFileName, formatting_info=True, on_demand=True)
         
-        self.log.debug('Loading Marking file {0}'.format(markingFileName))
-        self.marking = {}
-        for mrk in open(markingFileName):
-            (index_str, cell, style) = mrk.strip().split(';')
-            index = int(index_str)
-            self.marking.setdefault(index, {})
-            self.marking[index][cell] = style
-
+        self.log.debug('Reading styles')
+        self.styles = Styles(self.wb)
+        
     def doLink(self):
         """
         Start processing all the sheets in workbook
@@ -80,13 +76,11 @@ class TabLink(object):
         activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename))
         srcURI      = self.conf.getURI('cedar', "{0}-src".format(self.basename))
         srcdistURI  = self.conf.getURI('cedar', "{0}-src-dist".format(self.basename))
-        root = URIRef("https://github.com/CEDAR-project/Integrator/raw/master/")
+        root = URIRef("https://raw.githubusercontent.com/CEDAR-project/DataDump/master/")
         datasetDumpURI = root + os.path.relpath(self.dataFileName)
         if self.conf.isCompress():
             datasetDumpURI = datasetDumpURI + '.bz2' 
         excelFileURI = root + self.excelFileName
-        markingFileNameURI = root + self.markingFileName
-        markingURI = self.conf.getURI('cedar', self.markingFileName.split('/')[-1].split('.')[0] + '-marking-dist')
         
         # Describe the data set
         self.graph.add((datasetURI,RDF.type,self.conf.getURI('dcat', 'DataSet')))
@@ -121,13 +115,7 @@ class TabLink(object):
         self.graph.add((activityURI,self.conf.getURI('prov', 'startedAtTime'),startTime))
         self.graph.add((activityURI,self.conf.getURI('prov', 'endedAtTime'),endTime))
         self.graph.add((activityURI,self.conf.getURI('prov', 'wasAssociatedWith'),self.conf.getURI('tablink', "tabLink")))
-        self.graph.add((activityURI,self.conf.getURI('prov', 'used'),markingURI))
         self.graph.add((activityURI,self.conf.getURI('prov', 'used'),srcdistURI))
-
-        # Describe the marking file as distribution
-        self.graph.add((markingURI,RDF.type,self.conf.getURI('dcat', 'Distribution')))
-        self.graph.add((markingURI,RDFS.label, Literal(markingFileNameURI.split('/')[-1])))
-        self.graph.add((markingURI,self.conf.getURI('dcterms', 'accessURL'), markingFileNameURI))
         
         # Save the graph
         self.log.info("Saving {} data triples.".format(len(self.graph)))
@@ -136,7 +124,7 @@ class TabLink(object):
             self.graph.serialize(destination=out, format='n3')
             out.close()
         except :
-            logging.error(self.basename + "Whoops! Something went wrong in serializing to output file")
+            logging.error(self.basename + "Whoops! Something went wrong in serialising to output file")
             logging.info(sys.exc_info())
             traceback.print_exc(file=sys.stdout)
         
@@ -162,27 +150,25 @@ class TabLink(object):
         
         for i in range(0, rowns):
             for j in range(0, colns):
-                # Skip cells for which no marking information is available
-                if cellname(i, j) not in self.marking[n]:
-                    continue
                 
                 # Prepare context for processing the cell
+                cell_obj = sheet.cell(i, j)
                 cell = {
                     # Coordinates
                     'i' : i,
                     'j' : j,
                     # The cell itself
-                    'cell' : sheet.cell(i, j),
+                    'cell' : cell_obj,
                     # The sheet
                     'sheet' : sheet,
                     # The name of the cell
                     'name' : cellname(i, j),
                     # The type of the cell
-                    'type' : self.marking[n][cellname(i, j)],
+                    'type' : self.styles[cell_obj].name,
                     # The (cleaned) value of the cell
-                    'value' : str(sheet.cell(i, j).value).strip(),
+                    'value' : str(cell_obj.value).strip(),
                     # Is empty ?
-                    'isEmpty' : self.isEmpty(sheet.cell(i, j)),
+                    'isEmpty' : self.isEmpty(cell_obj),
                     # Compose a resource name for the cell
                     'URI' : URIRef("{0}-{1}".format(sheetURI, cellname(i, j))),
                     # Pass on the URI of the data set
@@ -255,7 +241,7 @@ class TabLink(object):
             return
 
         # Add the cell to the graph
-        self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
+        self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'), True)
         
         # Get the row        
         i = cell['i']
@@ -290,7 +276,7 @@ class TabLink(object):
             # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
         elif not cell['isEmpty']:
             # Add the cell to the graph
-            self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
+            self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'), True)
             rowDimensions.setdefault(i, {})
             rowDimensions[i][prop] = cell['URI']
             # self.log.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowValues[i]))
@@ -310,7 +296,7 @@ class TabLink(object):
         else:
             # Add the cell to the graph
             self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'))
+            self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'), True)
             # If there is already a parent dimension, connect to it
             if cell['j'] in columnDimensions:
                 self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))
@@ -333,7 +319,7 @@ class TabLink(object):
         else:
             # Add the cell to the graph
             self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'))
+            self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'), True)
             dimension = cell['URI']
             
         rowProperties[cell['j']] = dimension        
@@ -448,11 +434,16 @@ class TabLink(object):
         return (cell.ctype == XL_CELL_EMPTY or cell.ctype == XL_CELL_BLANK or cell.value == '')
         
     
-    def _createCell(self, cell, cell_type):
+    def _createCell(self, cell, cell_type, clean = False):
         """
         Create a new cell
         """
         
+        # Set the value and clean it if requested
+        value = Literal(str(cell['value']))
+        if clean:
+            value = Literal(str(util.clean_string(cell['value'])))
+            
         # It's a cell
         self.graph.add((cell['URI'], RDF.type, cell_type))
         
@@ -460,7 +451,7 @@ class TabLink(object):
         self.graph.add((cell['URI'], self.conf.getURI('tablink', 'sheet'), cell['sheetURI']))
         
         # Add its value (removed the datatype=XSD.decimal because we can't be sure)
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), Literal(str(cell['value']))))
+        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), value))
         
         # Add a cell label
         label = "Cell %s=%s" % (cell['name'], cell['value'])
@@ -471,10 +462,9 @@ if __name__ == '__main__':
     
     # Test
     inputFile = "data-test/simple.xls"
-    markingFile = "data-test/simple-marking.txt"
     dataFile = "/tmp/data.ttl"
 
-    tLinker = TabLink(config, inputFile, markingFile, dataFile, processAnnotations = True)
+    tLinker = TabLink(config, inputFile, dataFile, processAnnotations = True)
     tLinker.doLink()
     
 
