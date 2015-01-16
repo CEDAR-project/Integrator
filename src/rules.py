@@ -103,7 +103,7 @@ class RuleMaker(object):
         Function used to process one of the sheets in the data sets
         '''
         if dims == None:
-            dims = self.mappings.keys()
+            dims = sorted(self.mappings.keys())
             
         self.log.info("Start processing %s" % dims)
         for dim in dims:
