@@ -360,7 +360,7 @@ class TabLink(object):
                         ))
         self.graph.add((body,
                         self.conf.getURI('tablink','value'),
-                        Literal(annot.text.replace("\n", " ").replace("\r", " ").replace("\r\n", " ").encode('utf-8'))
+                        Literal(util.clean_string(annot.text).encode('utf-8'))
                         ))
         if annot.author.encode('utf-8') != "":
             self.graph.add((annotation,
