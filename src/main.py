@@ -12,12 +12,11 @@ from rules import RuleMaker
 from cubes import CubeMaker
 
 # All the paths
-RAW_XLS_FILES = "data/input/raw-xls/*.xls"  # Raw XLS files fetched from EASY
-MARKING_FILES = "data/input/marking/*.txt"  # Annotations for the files
-MAPPING_FILES = "data/input/codes/*.csv"  # All the mapping
-RAW_RDF_PATH = "data/output/raw-rdf/"  # The raw RDF for the marked XLS
-H_RULES_PATH = "data/output/rules/"  # The harmonisation rules
-RELEASE_PATH = "data/output/release/"  # The released data set
+MARKED_XLS_FILES = "DataDump/xls-marked/*.xls"  # Marked XLS
+MAPPINGS = "DataDump/mapping/"  # All the mapping
+RAW_RDF_PATH = "DataDump/raw-rdf/"  # The raw RDF for the marked XLS
+H_RULES_PATH = "DataDump/rules/"  # The harmonisation rules
+RELEASE_PATH = "DataDump/release/"  # The released data set
 
 config = Configuration('config.ini')
 log = config.getLogger("Main")
@@ -50,21 +49,16 @@ def generate_raw_rdf():
     
     # Go check all the files one by one, push a task if needed
     marking_index = {}
-    for marking_file in glob.glob(MARKING_FILES):
-        name = os.path.basename(marking_file).split('.')[0]
-        marking_index[name] = marking_file        
-    for raw_xls_file in sorted(glob.glob(RAW_XLS_FILES)):
-        name = os.path.basename(raw_xls_file).split('.')[0]
+    for xls_file in sorted(glob.glob(MARKED_XLS_FILES)):
+        name = os.path.basename(xls_file).split('.')[0]
         if name in marking_index:
-            marking_file = marking_index[name]
             dataFile = RAW_RDF_PATH + name + '.ttl'
             dataFileCheck = dataFile
             if config.isCompress():
                 dataFileCheck = dataFileCheck + '.bz2'
             if (not os.path.exists(dataFileCheck)) or config.isOverwrite():
                 task = {'name':name,
-                        'raw_xls_file':raw_xls_file,
-                        'marking_file':marking_file,
+                        'xls_file':xls_file,
                         'dataFile':dataFile}
                 tasks.append(task)
     
@@ -80,11 +74,10 @@ def generate_raw_rdf_thread(parameters):
     global log
     
     name = parameters['name']
-    raw_xls_file = parameters['raw_xls_file']
-    marking_file = parameters['marking_file']
+    xls_file = parameters['xls_file']
     dataFile = parameters['dataFile']
     log.info("Calling tablinker for %s" % name)
-    tLinker = TabLink(config, raw_xls_file, marking_file, dataFile)
+    tLinker = TabLink(config, xls_file, dataFile, processAnnotations = True)
     tLinker.doLink()
     
 def generate_harmonization_rules():
@@ -118,7 +111,7 @@ def generate_harmonization_rules_thread(parameters):
     output = parameters['output']
     log.info("Process " + dataset.n3())
     rulesMaker = RuleMaker(config, dataset, output)
-    rulesMaker.loadMappings("DataDump/mapping") 
+    rulesMaker.loadMappings(MAPPINGS) 
     rulesMaker.loadHeaders(True)
     rulesMaker.process()
         

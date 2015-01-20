@@ -17,7 +17,6 @@ import pprint
 
 import sys
 from common.configuration import Configuration
-from common import util
 from rdflib.namespace import RDFS
 reload(sys)
 import traceback
@@ -26,7 +25,7 @@ sys.setdefaultencoding("utf8")  # @UndefinedVariable
 pp = pprint.PrettyPrinter(indent=2)
 
 class TabLink(object):
-    def __init__(self, conf, excelFileName, dataFileName, processAnnotations = False):
+    def __init__(self, conf, excelFileName, dataFileName, processAnnotations=False):
         """
         Constructor
         """
@@ -55,8 +54,8 @@ class TabLink(object):
         """
         self.log.debug('Starting TabLink for all sheets in workbook')
         # keep the starting time (ex "2012-04-15T13:00:00-04:00")
-        startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
-                            datatype=self.conf.getURI('xsd','dateTime'))
+        startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                            datatype=self.conf.getURI('xsd', 'dateTime'))
 
         # Process all the sheets
         self.log.info(self.basename + ':Found %d sheets to process' % self.wb.nsheets)
@@ -64,21 +63,26 @@ class TabLink(object):
         for n in range(self.wb.nsheets) :
             self.log.debug('Processing sheet {0}'.format(n))
             try:
-                sheetURI = self.parseSheet(n)
-                sheetURIs.append(sheetURI)
+                (sheetURI, marked_count) = self.parseSheet(n)
+                if marked_count != 0:
+                    # Describe the sheet
+                    self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
+                    self.graph.add((sheetURI, RDFS.label, Literal(self.wb.sheet_by_index(n).name)))
+                    # Add it to the dataset
+                    sheetURIs.append(sheetURI)
             except:
                 self.log.error("Error processing sheet %d of %s" % (n, self.basename))
             
         # end time for the conversion process
-        endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
-                          datatype=self.conf.getURI('xsd','dateTime'))
+        endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                          datatype=self.conf.getURI('xsd', 'dateTime'))
         
         # Mint the URIs
-        datasetURI  = self.conf.getURI('cedar', "{0}".format(self.basename))
-        distURI     = self.conf.getURI('cedar', "{0}-dist".format(self.basename))
+        datasetURI = self.conf.getURI('cedar', "{0}".format(self.basename))
+        distURI = self.conf.getURI('cedar', "{0}-dist".format(self.basename))
         activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename))
-        srcURI      = self.conf.getURI('cedar', "{0}-src".format(self.basename))
-        srcdistURI  = self.conf.getURI('cedar', "{0}-src-dist".format(self.basename))
+        srcURI = self.conf.getURI('cedar', "{0}-src".format(self.basename))
+        srcdistURI = self.conf.getURI('cedar', "{0}-src-dist".format(self.basename))
         root = URIRef("https://raw.githubusercontent.com/CEDAR-project/DataDump/master/")
         datasetDumpURI = root + os.path.relpath(self.dataFileName)
         if self.conf.isCompress():
@@ -86,39 +90,39 @@ class TabLink(object):
         excelFileURI = root + self.excelFileName
         
         # Describe the data set
-        self.graph.add((datasetURI,RDF.type,self.conf.getURI('dcat', 'DataSet')))
-        self.graph.add((datasetURI,RDFS.label,Literal(self.basename)))
-        self.graph.add((datasetURI,self.conf.getURI('prov', 'wasDerivedFrom'),srcURI))
-        self.graph.add((datasetURI,self.conf.getURI('prov', 'wasGeneratedBy'),activityURI))
+        self.graph.add((datasetURI, RDF.type, self.conf.getURI('dcat', 'DataSet')))
+        self.graph.add((datasetURI, RDFS.label, Literal(self.basename)))
+        self.graph.add((datasetURI, self.conf.getURI('prov', 'wasDerivedFrom'), srcURI))
+        self.graph.add((datasetURI, self.conf.getURI('prov', 'wasGeneratedBy'), activityURI))
         for sheetURI in sheetURIs:
-            self.graph.add((datasetURI,self.conf.getURI('dcterms', 'hasPart'),sheetURI))
-        self.graph.add((datasetURI,self.conf.getURI('dcat', 'distribution'),distURI))
+            self.graph.add((datasetURI, self.conf.getURI('dcterms', 'hasPart'), sheetURI))
+        self.graph.add((datasetURI, self.conf.getURI('dcat', 'distribution'), distURI))
         
         # Describe the distribution of the dataset
-        self.graph.add((distURI,RDF.type,self.conf.getURI('dcat', 'Distribution')))
+        self.graph.add((distURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
         dumpname = os.path.basename(self.dataFileName)
         if self.conf.isCompress():
             dumpname = dumpname + '.bz2'
-        self.graph.add((distURI,RDFS.label,Literal(dumpname)))
-        self.graph.add((distURI,self.conf.getURI('dcterms', 'accessURL'),datasetDumpURI))
+        self.graph.add((distURI, RDFS.label, Literal(dumpname)))
+        self.graph.add((distURI, self.conf.getURI('dcterms', 'accessURL'), datasetDumpURI))
         
         # Describe the source of the dataset
-        self.graph.add((srcURI,RDF.type,self.conf.getURI('dcat', 'DataSet')))
-        self.graph.add((srcURI,RDFS.label,Literal(os.path.basename(self.excelFileName))))
-        self.graph.add((srcURI,self.conf.getURI('dcat', 'distribution'),srcdistURI))
-        self.graph.add((srcURI,self.conf.getURI('tablink', 'sheets'),Literal(self.wb.nsheets)))
+        self.graph.add((srcURI, RDF.type, self.conf.getURI('dcat', 'DataSet')))
+        self.graph.add((srcURI, RDFS.label, Literal(os.path.basename(self.excelFileName))))
+        self.graph.add((srcURI, self.conf.getURI('dcat', 'distribution'), srcdistURI))
+        self.graph.add((srcURI, self.conf.getURI('tablink', 'sheets'), Literal(self.wb.nsheets)))
         
         # Describe the distribution of the source of the dataset
-        self.graph.add((srcdistURI,RDF.type,self.conf.getURI('dcat', 'Distribution')))
-        self.graph.add((srcdistURI,RDFS.label,Literal(os.path.basename(self.excelFileName))))
-        self.graph.add((srcdistURI,self.conf.getURI('dcterms', 'accessURL'),excelFileURI))
+        self.graph.add((srcdistURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
+        self.graph.add((srcdistURI, RDFS.label, Literal(os.path.basename(self.excelFileName))))
+        self.graph.add((srcdistURI, self.conf.getURI('dcterms', 'accessURL'), excelFileURI))
         
         # The activity is the conversion process
-        self.graph.add((activityURI,RDF.type,self.conf.getURI('prov', 'Activity')))
-        self.graph.add((activityURI,self.conf.getURI('prov', 'startedAtTime'),startTime))
-        self.graph.add((activityURI,self.conf.getURI('prov', 'endedAtTime'),endTime))
-        self.graph.add((activityURI,self.conf.getURI('prov', 'wasAssociatedWith'),self.conf.getURI('tablink', "tabLink")))
-        self.graph.add((activityURI,self.conf.getURI('prov', 'used'),srcdistURI))
+        self.graph.add((activityURI, RDF.type, self.conf.getURI('prov', 'Activity')))
+        self.graph.add((activityURI, self.conf.getURI('prov', 'startedAtTime'), startTime))
+        self.graph.add((activityURI, self.conf.getURI('prov', 'endedAtTime'), endTime))
+        self.graph.add((activityURI, self.conf.getURI('prov', 'wasAssociatedWith'), self.conf.getURI('tablink', "tabLink")))
+        self.graph.add((activityURI, self.conf.getURI('prov', 'used'), srcURI))
         
         # Save the graph
         self.log.info("Saving {} data triples.".format(len(self.graph)))
@@ -141,21 +145,26 @@ class TabLink(object):
         self.log.info(self.basename + ":Parsing {0} rows and {1} columns in sheet \"{2}\"".format(rowns, colns, sheet.name))
         
         # Define a sheetURI for the current sheet
-        sheetURI = self.conf.getURI('cedar', "{0}-S{1}".format(self.basename, n))
-        
-        # Describe the sheet
-        self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
-        self.graph.add((sheetURI, RDFS.label, Literal(sheet.name)))
+        sheetURI = self.conf.getURI('cedar', "{0}-S{1}".format(self.basename, n))        
         
         columnDimensions = {}
         rowDimensions = {}
         rowProperties = {}
-        
+        marked_count = 0
+                
         for i in range(0, rowns):
             for j in range(0, colns):
                 
                 # Prepare context for processing the cell
                 cell_obj = sheet.cell(i, j)
+        
+                literal = cell_obj.value
+                if type(literal) == type(1.0):
+                    if literal.is_integer():
+                        literal = str(int(literal))
+                    else:
+                        literal = str(float(literal))
+                        
                 cell = {
                     # Coordinates
                     'i' : i,
@@ -169,7 +178,7 @@ class TabLink(object):
                     # The type of the cell
                     'type' : self.styles[cell_obj].name,
                     # The (cleaned) value of the cell
-                    'value' : str(cell_obj.value).strip(),
+                    'value' : literal,
                     # Is empty ?
                     'isEmpty' : self.isEmpty(cell_obj),
                     # Compose a resource name for the cell
@@ -180,6 +189,10 @@ class TabLink(object):
                 
                 # self.log.debug("({},{}) {}/{}: \"{}\"". format(i, j, cellType, cellName, cellValue))
 
+                # Increase the counter of marked cells
+                if cell['type'] in ['TL Data', 'TL RowHeader', 'TL HRowHeader', 'TL ColHeader', 'TL RowProperty']:
+                    marked_count = marked_count + 1
+                    
                 # Parse cell content
                 if cell['type'] == 'TL Data':
                     self.handleData(cell, columnDimensions, rowDimensions)
@@ -200,7 +213,7 @@ class TabLink(object):
                 
         # Relate all the row properties to their row headers
         for rowDimension in rowDimensions:
-                for (p,v) in rowDimensions[rowDimension].iteritems():
+                for (p, v) in rowDimensions[rowDimension].iteritems():
                     self.graph.add((v, self.conf.getURI('tablink', 'parentCell'), p))
         
         # Add additional information about the hierarchy of column headers
@@ -210,7 +223,7 @@ class TabLink(object):
         #        uri_top = self.getColHeaderValueURI(value[:index])
         #        self.graph.add((uri_sub, self.namespaces['tablink']['subColHeaderOf'], uri_top))
         
-        return sheetURI
+        return (sheetURI, marked_count)
         
     def handleData(self, cell, columnDimensions, rowDimensions) :
         """
@@ -244,7 +257,7 @@ class TabLink(object):
             return
 
         # Add the cell to the graph
-        self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'), True)
+        self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
         
         # Get the row        
         i = cell['i']
@@ -279,7 +292,7 @@ class TabLink(object):
             # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
         elif not cell['isEmpty']:
             # Add the cell to the graph
-            self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'), True)
+            self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
             rowDimensions.setdefault(i, {})
             rowDimensions[i][prop] = cell['URI']
             # self.log.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowValues[i]))
@@ -299,7 +312,7 @@ class TabLink(object):
         else:
             # Add the cell to the graph
             self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'), True)
+            self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'))
             # If there is already a parent dimension, connect to it
             if cell['j'] in columnDimensions:
                 self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))
@@ -322,7 +335,7 @@ class TabLink(object):
         else:
             # Add the cell to the graph
             self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'), True)
+            self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'))
             dimension = cell['URI']
             
         rowProperties[cell['j']] = dimension        
@@ -347,14 +360,14 @@ class TabLink(object):
 
         self.graph.add((annotation,
                         RDF.type,
-                        self.conf.getURI('oa','Annotation')
+                        self.conf.getURI('oa', 'Annotation')
                         ))
         self.graph.add((annotation,
-                        self.conf.getURI('oa','hasTarget'),
+                        self.conf.getURI('oa', 'hasTarget'),
                         cell['URI']
                         ))
         self.graph.add((annotation,
-                        self.conf.getURI('oa','hasBody'),
+                        self.conf.getURI('oa', 'hasBody'),
                         body
                         ))
         self.graph.add((body,
@@ -362,24 +375,24 @@ class TabLink(object):
                         RDFS.Resource
                         ))
         self.graph.add((body,
-                        self.conf.getURI('tablink','value'),
-                        Literal(util.clean_string(annot.text).encode('utf-8'))
+                        self.conf.getURI('tablink', 'value'),
+                        Literal(annot.text.encode('utf-8'))
                         ))
         if annot.author.encode('utf-8') != "":
             self.graph.add((annotation,
-                            self.conf.getURI('oa','annotatedBy'),
+                            self.conf.getURI('oa', 'annotatedBy'),
                             Literal(annot.author.encode('utf-8'))
                             ))
         self.graph.add((annotation,
-                        self.conf.getURI('oa','serializedBy'),
+                        self.conf.getURI('oa', 'serializedBy'),
                         URIRef("https://github.com/CEDAR-project/Integrator")
                         ))
         self.graph.add((annotation,
-                        self.conf.getURI('oa','serializedAt'),
-                        Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.conf.getURI('xsd','date'))
+                        self.conf.getURI('oa', 'serializedAt'),
+                        Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.conf.getURI('xsd', 'date'))
                         ))
         self.graph.add((annotation,
-                        self.conf.getURI('oa','modelVersion'),
+                        self.conf.getURI('oa', 'modelVersion'),
                         URIRef("http://www.openannotation.org/spec/core/20130208/index.html")
                         ))
         
@@ -437,15 +450,13 @@ class TabLink(object):
         return (cell.ctype == XL_CELL_EMPTY or cell.ctype == XL_CELL_BLANK or cell.value == '')
         
     
-    def _createCell(self, cell, cell_type, clean = False):
+    def _createCell(self, cell, cell_type):
         """
         Create a new cell
         """
         
-        # Set the value and clean it if requested
+        # Set the value
         value = Literal(str(cell['value']))
-        if clean:
-            value = Literal(str(util.clean_string(cell['value'])))
             
         # It's a cell
         self.graph.add((cell['URI'], RDF.type, cell_type))
@@ -467,7 +478,7 @@ if __name__ == '__main__':
     inputFile = "data-test/simple.xls"
     dataFile = "/tmp/data.ttl"
 
-    tLinker = TabLink(config, inputFile, dataFile, processAnnotations = True)
+    tLinker = TabLink(config, inputFile, dataFile, processAnnotations=True)
     tLinker.doLink()
     
 
