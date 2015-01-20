@@ -13,19 +13,13 @@ from rdflib.namespace import RDFS
 from ConfigParser import SafeConfigParser
 from xlrd import open_workbook
 from xlutils.margins import number_of_good_cols, number_of_good_rows
+from common import util
 
 import sys
-from common import util
 reload(sys)
 sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
-
 pp = pprint.PrettyPrinter(indent=2)
-
-# TODO add rdfs:label to everything
-
-# Fetch all the headers using the corresponding query
-# Use literal+ds as key for mapping in MappingsList
 
 HEADERS_QUERY = 'Queries/get-headers.rq'
 HEADERS_CACHE_DIR = '_cache/'
