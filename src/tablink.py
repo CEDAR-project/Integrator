@@ -4,10 +4,6 @@ Convert Excel files with matching style into RDF cubes
 
 Code derived from TabLinker
 """
-from xlutils.margins import number_of_good_cols, number_of_good_rows
-from xlutils.styles import Styles
-from xlrd import open_workbook, XL_CELL_EMPTY, XL_CELL_BLANK, cellname
-from rdflib import ConjunctiveGraph, Literal, RDF, URIRef
 import re
 import logging
 import datetime
@@ -15,15 +11,58 @@ import bz2
 import os.path
 import pprint
 
-import sys
-from common.configuration import Configuration
+from rdflib import ConjunctiveGraph, Literal, RDF, URIRef
 from rdflib.namespace import RDFS
+from odf.opendocument import load
+from odf.table import Table, TableRow
+from odf.namespaces import TABLENS, STYLENS
+from odf import text
+from odf.style import Style
+from common.configuration import Configuration
 from common import util
+
+import sys
 reload(sys)
 import traceback
 sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
 pp = pprint.PrettyPrinter(indent=2)
+
+def getColumns(row):
+    columns = []
+    node = row.firstChild
+    end = row.lastChild
+    while node != end:
+        (_, t) = node.qname
+        
+        # Focus on (covered) table cells only
+        if t != 'covered-table-cell' and t != 'table-cell':
+            continue
+        
+        # If the cell is covered insert a None, otherwise use the cell
+        n = node if t == 'table-cell' else None
+        columns.append(n)
+        
+        # Shall we repeat this ?
+        repeat = node.getAttrNS(TABLENS, 'number-columns-repeated')
+        if repeat != None:
+            repeat = int(repeat) - 1
+            while repeat != 0:
+                columns.append(n)
+                repeat = repeat - 1
+        
+        # Move to next node
+        node = node.nextSibling
+    return columns
+
+def colName(number):
+    ordA = ord('A')
+    length = ord('Z') - ordA + 1
+    output = ""
+    while (number >= 0):
+        output = chr(number % length + ordA) + output
+        number = number // length - 1
+    return output
 
 class TabLink(object):
     def __init__(self, conf, excelFileName, dataFileName, processAnnotations=False):
@@ -41,14 +80,19 @@ class TabLink(object):
         self.conf.bindNamespaces(self.graph)
         
         self.basename = os.path.basename(excelFileName)
-        self.basename = re.search('(.*)\.xls', self.basename).group(1)
+        self.basename = re.search('(.*)\.ods', self.basename).group(1)
         
         self.log.debug('Loading Excel file {0}'.format(excelFileName))
-        self.wb = open_workbook(excelFileName, formatting_info=True, on_demand=True)
+        self.book = load(unicode(excelFileName))
         
-        self.log.debug('Reading styles')
-        self.styles = Styles(self.wb)
-        
+        self.log.debug('Loading custom styles')
+        self.stylesnames = {}
+        for style in self.book.getElementsByType(Style):
+            parentname = style.getAttrNS(STYLENS, 'parent-style-name')
+            name = style.getAttrNS(STYLENS, 'name')
+            if parentname != None:
+                self.stylesnames[name] = parentname
+            
     def doLink(self):
         """
         Start processing all the sheets in workbook
@@ -58,21 +102,23 @@ class TabLink(object):
         startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                             datatype=self.conf.getURI('xsd', 'dateTime'))
 
+        sheets = self.book.getElementsByType(Table)
+        
         # Process all the sheets
-        self.log.info(self.basename + ':Found %d sheets to process' % self.wb.nsheets)
+        self.log.info(self.basename + ':Found %d sheets to process' % len(sheets))
         sheetURIs = []
-        for n in range(self.wb.nsheets) :
+        for n in range(len(sheets)) :
             self.log.debug('Processing sheet {0}'.format(n))
-            try:
-                (sheetURI, marked_count) = self.parseSheet(n)
-                if marked_count != 0:
-                    # Describe the sheet
-                    self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
-                    self.graph.add((sheetURI, RDFS.label, Literal(self.wb.sheet_by_index(n).name)))
-                    # Add it to the dataset
-                    sheetURIs.append(sheetURI)
-            except:
-                self.log.error("Error processing sheet %d of %s" % (n, self.basename))
+            # try:
+            (sheetURI, marked_count) = self.parseSheet(n, sheets[n])
+            if marked_count != 0:
+                # Describe the sheet
+                self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
+                self.graph.add((sheetURI, RDFS.label, Literal(sheets[n].getAttrNS(TABLENS, 'name'))))
+                # Add it to the dataset
+                sheetURIs.append(sheetURI)
+            # except:
+            #    self.log.error("Error processing sheet %d of %s" % (n, self.basename))
             
         # end time for the conversion process
         endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -111,7 +157,7 @@ class TabLink(object):
         self.graph.add((srcURI, RDF.type, self.conf.getURI('dcat', 'DataSet')))
         self.graph.add((srcURI, RDFS.label, Literal(os.path.basename(self.excelFileName))))
         self.graph.add((srcURI, self.conf.getURI('dcat', 'distribution'), srcdistURI))
-        self.graph.add((srcURI, self.conf.getURI('tablink', 'sheets'), Literal(self.wb.nsheets)))
+        self.graph.add((srcURI, self.conf.getURI('tablink', 'sheets'), Literal(len(sheets))))
         
         # Describe the distribution of the source of the dataset
         self.graph.add((srcdistURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
@@ -136,15 +182,10 @@ class TabLink(object):
             logging.info(sys.exc_info())
             traceback.print_exc(file=sys.stdout)
         
-    def parseSheet(self, n):
+    def parseSheet(self, n, sheet):
         """
         Parses the currently selected sheet in the workbook, takes no arguments. Iterates over all cells in the Excel sheet and produces relevant RDF Triples. 
         """        
-        sheet = self.wb.sheet_by_index(n)
-        colns = number_of_good_cols(sheet)
-        rowns = number_of_good_rows(sheet)
-        self.log.info(self.basename + ":Parsing {0} rows and {1} columns in sheet \"{2}\"".format(rowns, colns, sheet.name))
-        
         # Define a sheetURI for the current sheet
         sheetURI = self.conf.getURI('cedar', "{0}-S{1}".format(self.basename, n))        
         
@@ -152,38 +193,47 @@ class TabLink(object):
         rowDimensions = {}
         rowProperties = {}
         marked_count = 0
-                
-        for i in range(0, rowns):
-            for j in range(0, colns):
-                
-                # Prepare context for processing the cell
-                cell_obj = sheet.cell(i, j)
         
-                literal = cell_obj.value
-                if type(literal) == type(1.0):
-                    if literal.is_integer():
-                        literal = str(int(literal))
-                    else:
-                        literal = str(float(literal))
+        rows = sheet.getElementsByType(TableRow)
+        for rowIndex in range(0, len(rows)):
+            cols = getColumns(rows[rowIndex])
+            for colIndex in range(0, len(cols)):
+                cell_obj = cols[colIndex]
+                
+                if cell_obj == None:
+                    continue
                         
+                # Get the cell name and the current style
+                cellName = colName(colIndex) + str(rowIndex + 1)
+                
+                if len(cell_obj.getElementsByType(text.P)) == 0:
+                    literal = ''
+                else:
+                    literal = cell_obj.getElementsByType(text.P)[0]
+                    if type(literal) == type(1.0):
+                        if literal.is_integer():
+                            literal = str(int(literal))
+                        else:
+                            literal = str(float(literal))
+                
                 cell = {
                     # Coordinates
-                    'i' : i,
-                    'j' : j,
+                    'i' : rowIndex,
+                    'j' : colIndex,
                     # The cell itself
                     'cell' : cell_obj,
                     # The sheet
                     'sheet' : sheet,
                     # The name of the cell
-                    'name' : cellname(i, j),
+                    'name' : cellName,
                     # The type of the cell
-                    'type' : self.styles[cell_obj].name,
+                    'type' : self.getStyle(cell_obj),
                     # The (cleaned) value of the cell
-                    'value' : literal,
+                    'value' : str(literal),
                     # Is empty ?
-                    'isEmpty' : self.isEmpty(cell_obj),
+                    'isEmpty' : str(literal) == '',
                     # Compose a resource name for the cell
-                    'URI' : URIRef("{0}-{1}".format(sheetURI, cellname(i, j))),
+                    'URI' : URIRef("{0}-{1}".format(sheetURI, cellName)),
                     # Pass on the URI of the data set
                     'sheetURI' : sheetURI
                 }
@@ -209,8 +259,8 @@ class TabLink(object):
                     self.handleTitle(cell)
 
                 # Parse annotation if any and if their processing is enabled
-                if (i, j) in sheet.cell_note_map and self.processAnnotations:
-                    self.handleAnnotation(cell)
+                # if (i, j) in sheet.cell_note_map and self.processAnnotations:
+                #    self.handleAnnotation(cell)
                 
         # Relate all the row properties to their row headers
         for rowDimension in rowDimensions:
@@ -226,6 +276,14 @@ class TabLink(object):
         
         return (sheetURI, marked_count)
         
+    def getStyle(self, cell):
+        stylename = cell.getAttrNS(TABLENS, 'style-name')
+        if stylename != None:
+            if stylename.startswith('ce'):
+                stylename = self.stylesnames[stylename]
+            stylename = stylename.replace('_20_', ' ') 
+        return stylename
+    
     def handleData(self, cell, columnDimensions, rowDimensions) :
         """
         Create relevant triples for the cell marked as Data
@@ -241,14 +299,14 @@ class TabLink(object):
             for dim in rowDimensions[cell['i']].itervalues():
                 self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
         except KeyError :
-            self.log.debug("({}.{}) No row dimension for cell".format(cell['i'], cell['j']))
+            self.log.debug("({},{}) No row dimension for cell".format(cell['i'], cell['j']))
         
         # Bind all the column dimensions
         try :
             for dim in columnDimensions[cell['j']]:
                 self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
         except KeyError :
-            self.log.debug("({}.{}) No column dimension for cell".format(cell['i'], cell['j']))
+            self.log.debug("({},{}) No column dimension for cell".format(cell['i'], cell['j']))
         
     def handleRowHeader(self, cell, rowDimensions, rowProperties) :
         """
@@ -302,50 +360,51 @@ class TabLink(object):
         """
         Create relevant triples for the cell marked as Header
         """
-        dimension = None
-        
-        # If inside a merge box get the parent dimension otherwise create
-        # a new dimension
-        if self.insideMergeBox(cell['sheet'], cell['i'], cell['j']) and cell['isEmpty']:
-            k, l = self.getMergeBoxCoord(cell['sheet'], cell['i'], cell['j'])
-            self.log.debug("({},{}) Inside merge box ({}, {})".format(cell['i'], cell['j'], k, l))
-            dimension = columnDimensions[l][-1]
-        else:
-            # Add the cell to the graph
-            self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'))
-            # If there is already a parent dimension, connect to it
-            if cell['j'] in columnDimensions:
-                self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))
-        
-            dimension = cell['URI']
+        # Add the cell to the graph
+        self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
+        self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'))
+        # If there is already a parent dimension, connect to it
+        if cell['j'] in columnDimensions:
+            self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))    
+        dimension = cell['URI']
             
         # Add the dimension to the dimensions list for that column
         columnDimensions.setdefault(cell['j'], []).append(dimension)
+        
+        # Look if we cover other cells
+        columns_spanned = cell['cell'].getAttrNS(TABLENS, 'number-columns-spanned')
+        if columns_spanned != None:
+            columns_spanned = int(columns_spanned)
+            for extra in range(1, columns_spanned):
+                spanned_col = cell['j'] + extra
+                self.log.debug("Span over ({},{})".format(cell['i'], spanned_col))
+                columnDimensions.setdefault(spanned_col, []).append(dimension)
+        
         
     def handleRowProperty(self, cell, rowProperties) :
         """
         Create relevant triples for the cell marked as Property Dimension
         """
-        dimension = None
         
-        if self.insideMergeBox(cell['sheet'], cell['i'], cell['j']) and cell['isEmpty']:
-            k, l = self.getMergeBoxCoord(cell['sheet'], cell['i'], cell['j'])
-            self.log.debug("({},{}) Inside merge box ({}, {})".format(cell['i'], cell['j'], k, l))
-            dimension = rowProperties[l]
-        else:
-            # Add the cell to the graph
-            self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-            self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'))
-            dimension = cell['URI']
+        # Add the cell to the graph
+        self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
+        self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'))
+        rowProperties[cell['j']] = cell['URI']        
+        
+        # Look if we cover other cells
+        columns_spanned = cell['cell'].getAttrNS(TABLENS, 'number-columns-spanned')
+        if columns_spanned != None:
+            columns_spanned = int(columns_spanned)
+            for extra in range(1, columns_spanned):
+                self.log.debug("Span over ({},{})".format(cell['i'], cell['j'] + extra))
+                rowProperties[cell['j'] + extra] = cell['URI']
             
-        rowProperties[cell['j']] = dimension        
     
     def handleTitle(self, cell) :
         """
         Create relevant triples for the cell marked as Title 
         """
-        self.graph.add((cell['sheetURI'], self.conf.getURI('rdfs', 'comment'), Literal(util.clean_string(cell['value']))))        
+        self.graph.add((cell['sheetURI'], RDFS.comment, Literal(util.clean_string(cell['value']))))        
     
     def handleAnnotation(self, cell) :
         """
@@ -400,57 +459,6 @@ class TabLink(object):
     # ##
     #    Utility Functions
     # ## 
-    
-    def insideMergeBox(self, sheet, i, j):
-        """
-        Check if the specified cell is inside a merge box
-
-        Arguments:
-        i -- row
-        j -- column
-
-        Returns:
-        True/False -- depending on whether the cell is inside a merge box
-        """
-        merged_cells = sheet.merged_cells
-        for crange in merged_cells:
-            rlo, rhi, clo, chi = crange
-            if i <= rhi - 1 and i >= rlo and j <= chi - 1 and j >= clo:
-                return True
-        return False
-        
-
-    def getMergeBoxCoord(self, sheet, i, j):
-        """
-        Get the top-left corner cell of the merge box containing the specified cell
-
-        Arguments:
-        i -- row
-        j -- column
-
-        Returns:
-        (k, l) -- Coordinates of the top-left corner of the merge box
-        """
-        if not self.insideMergeBox(sheet, i, j):
-            return (-1, -1)
-
-        merged_cells = sheet.merged_cells
-        for crange in merged_cells:
-            rlo, rhi, clo, chi = crange
-            if i <= rhi - 1 and i >= rlo and j <= chi - 1 and j >= clo:
-                return (rlo, clo)            
-         
-    def isEmpty(self, cell):
-        """
-        Check whether a cell is empty.
-        
-        Returns:
-        True/False -- depending on whether the cell is empty
-        """
-        
-        return (cell.ctype == XL_CELL_EMPTY or cell.ctype == XL_CELL_BLANK or cell.value == '')
-        
-    
     def _createCell(self, cell, cell_type):
         """
         Create a new cell
@@ -476,7 +484,7 @@ if __name__ == '__main__':
     config = Configuration('config.ini')
     
     # Test
-    inputFile = "data-test/simple.xls"
+    inputFile = "data-test/simple.ods"
     dataFile = "/tmp/data.ttl"
 
     tLinker = TabLink(config, inputFile, dataFile, processAnnotations=True)
