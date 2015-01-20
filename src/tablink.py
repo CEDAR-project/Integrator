@@ -12,11 +12,11 @@ import os.path
 import pprint
 
 from rdflib import ConjunctiveGraph, Literal, RDF, URIRef
-from rdflib.namespace import RDFS
+from rdflib.namespace import RDFS, XSD
 from odf.opendocument import load
 from odf.table import Table, TableRow
 from odf.namespaces import TABLENS, STYLENS
-from odf import text
+from odf import text, office, dc
 from odf.style import Style
 from common.configuration import Configuration
 from common import util
@@ -64,6 +64,15 @@ def colName(number):
         number = number // length - 1
     return output
 
+
+def getText(cell_obj):
+    val = []
+    for c in cell_obj.childNodes:
+        if c.isInstanceOf(text.P):
+            val.append(str(c))
+    return ' '.join(val)
+
+
 class TabLink(object):
     def __init__(self, conf, excelFileName, dataFileName, processAnnotations=False):
         """
@@ -109,16 +118,16 @@ class TabLink(object):
         sheetURIs = []
         for n in range(len(sheets)) :
             self.log.debug('Processing sheet {0}'.format(n))
-            # try:
-            (sheetURI, marked_count) = self.parseSheet(n, sheets[n])
-            if marked_count != 0:
-                # Describe the sheet
-                self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
-                self.graph.add((sheetURI, RDFS.label, Literal(sheets[n].getAttrNS(TABLENS, 'name'))))
-                # Add it to the dataset
-                sheetURIs.append(sheetURI)
-            # except:
-            #    self.log.error("Error processing sheet %d of %s" % (n, self.basename))
+            try:
+                (sheetURI, marked_count) = self.parseSheet(n, sheets[n])
+                if marked_count != 0:
+                    # Describe the sheet
+                    self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
+                    self.graph.add((sheetURI, RDFS.label, Literal(sheets[n].getAttrNS(TABLENS, 'name'))))
+                    # Add it to the dataset
+                    sheetURIs.append(sheetURI)
+            except:
+                self.log.error("Error processing sheet %d of %s" % (n, self.basename))
             
         # end time for the conversion process
         endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -209,7 +218,7 @@ class TabLink(object):
                 if len(cell_obj.getElementsByType(text.P)) == 0:
                     literal = ''
                 else:
-                    literal = cell_obj.getElementsByType(text.P)[0]
+                    literal = getText(cell_obj)
                     if type(literal) == type(1.0):
                         if literal.is_integer():
                             literal = str(int(literal))
@@ -259,8 +268,9 @@ class TabLink(object):
                     self.handleTitle(cell)
 
                 # Parse annotation if any and if their processing is enabled
-                # if (i, j) in sheet.cell_note_map and self.processAnnotations:
-                #    self.handleAnnotation(cell)
+                annotations = cell_obj.getElementsByType(office.Annotation)
+                if len(annotations) != 0:
+                    self.handleAnnotation(cell, annotations[0])
                 
         # Relate all the row properties to their row headers
         for rowDimension in rowDimensions:
@@ -406,56 +416,32 @@ class TabLink(object):
         """
         self.graph.add((cell['sheetURI'], RDFS.comment, Literal(util.clean_string(cell['value']))))        
     
-    def handleAnnotation(self, cell) :
+    def handleAnnotation(self, cell, annotation) :
         """
-        Create relevant triples for the annotation attached to cell (i, j)
+        Create relevant triples for the annotation attached to the cell
         """
-        i = cell['i']
-        j = cell['j']
-        annot = cell['sheet'].cell_note_map[(i, j)]
         
         # Create triples according to Open Annotation model
-        annotation = cell['URI'] + "-oa"
-        body = annotation + '-body'
+        annotation_URI = cell['URI'] + "-oa"
+        annotation_body_URI = annotation_URI + '-body'
 
-        self.graph.add((annotation,
-                        RDF.type,
-                        self.conf.getURI('oa', 'Annotation')
-                        ))
-        self.graph.add((annotation,
-                        self.conf.getURI('oa', 'hasTarget'),
-                        cell['URI']
-                        ))
-        self.graph.add((annotation,
-                        self.conf.getURI('oa', 'hasBody'),
-                        body
-                        ))
-        self.graph.add((body,
-                        RDF.type,
-                        RDFS.Resource
-                        ))
-        self.graph.add((body,
-                        self.conf.getURI('tablink', 'value'),
-                        Literal(util.clean_string(annot.text).encode('utf-8'))
-                        ))
-        if annot.author.encode('utf-8') != "":
-            self.graph.add((annotation,
-                            self.conf.getURI('oa', 'annotatedBy'),
-                            Literal(util.clean_string(annot.author).encode('utf-8'))
-                            ))
-        self.graph.add((annotation,
-                        self.conf.getURI('oa', 'serializedBy'),
-                        URIRef("https://github.com/CEDAR-project/Integrator")
-                        ))
-        self.graph.add((annotation,
-                        self.conf.getURI('oa', 'serializedAt'),
-                        Literal(datetime.datetime.now().strftime("%Y-%m-%d"), datatype=self.conf.getURI('xsd', 'date'))
-                        ))
-        self.graph.add((annotation,
-                        self.conf.getURI('oa', 'modelVersion'),
-                        URIRef("http://www.openannotation.org/spec/core/20130208/index.html")
-                        ))
+        self.graph.add((annotation_URI, RDF.type, self.conf.getURI('oa', 'Annotation')))
+        self.graph.add((annotation_URI, self.conf.getURI('oa', 'hasTarget'), cell['URI']))
+        self.graph.add((annotation_URI, self.conf.getURI('oa', 'hasBody'), annotation_body_URI))
         
+        self.graph.add((annotation_body_URI, RDF.type, RDFS.Resource))
+        self.graph.add((annotation_body_URI, self.conf.getURI('tablink', 'value'), Literal(util.clean_string(getText(annotation)))))
+        # Extract author
+        author = annotation.getElementsByType(dc.Creator)
+        if len(author) > 0:
+            author = util.clean_string(str(author[0]))
+            self.graph.add((annotation_body_URI, self.conf.getURI('oa', 'annotatedBy'), Literal(author)))
+        # Extract date
+        creation_date = annotation.getElementsByType(dc.Date)
+        if len(creation_date) > 0:
+            creation_date = str(creation_date[0])
+            self.graph.add((annotation_body_URI, self.conf.getURI('oa', 'serializedAt'), Literal(creation_date, datatype=XSD.date)))
+            
     # ##
     #    Utility Functions
     # ## 
