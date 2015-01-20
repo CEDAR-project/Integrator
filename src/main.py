@@ -177,7 +177,7 @@ def push_to_virtuoso(named_graph, directory):
     global config
     global log
     
-    pusher = Pusher(config.get_SPARQL())
+    pusher = Pusher(config.get_SPARUL())
     log.info("Clean " + named_graph)
     pusher.clean_graph(named_graph)
     
