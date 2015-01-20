@@ -264,7 +264,7 @@ class RuleMaker(object):
         @input sections filter the sections to load
         '''
         # Read the metadata file
-        self.log.info("Loading mappings")
+        self.log.info("[%s] Loading mappings" % self.dataset)
         metadata = SafeConfigParser()
         metadata.read(mappingFilesPath + "/metadata.txt")
         for section in metadata.sections():

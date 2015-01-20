@@ -63,8 +63,11 @@ class TabLink(object):
         sheetURIs = []
         for n in range(self.wb.nsheets) :
             self.log.debug('Processing sheet {0}'.format(n))
-            sheetURI = self.parseSheet(n)
-            sheetURIs.append(sheetURI)
+            try:
+                sheetURI = self.parseSheet(n)
+                sheetURIs.append(sheetURI)
+            except:
+                self.log.error("Error processing sheet %d of %s" % (n, self.basename))
             
         # end time for the conversion process
         endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 

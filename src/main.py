@@ -83,12 +83,9 @@ def generate_raw_rdf_thread(parameters):
     raw_xls_file = parameters['raw_xls_file']
     marking_file = parameters['marking_file']
     dataFile = parameters['dataFile']
-    try:
-        log.info("Calling tablinker for %s" % name)
-        tLinker = TabLink(config, raw_xls_file, marking_file, dataFile)
-        tLinker.doLink()
-    except:
-        log.error("Can not process %s" % name)
+    log.info("Calling tablinker for %s" % name)
+    tLinker = TabLink(config, raw_xls_file, marking_file, dataFile)
+    tLinker.doLink()
     
 def generate_harmonization_rules():
     '''
