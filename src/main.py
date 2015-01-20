@@ -48,19 +48,17 @@ def generate_raw_rdf():
     tasks = []
     
     # Go check all the files one by one, push a task if needed
-    marking_index = {}
     for xls_file in sorted(glob.glob(MARKED_XLS_FILES)):
         name = os.path.basename(xls_file).split('.')[0]
-        if name in marking_index:
-            dataFile = RAW_RDF_PATH + name + '.ttl'
-            dataFileCheck = dataFile
-            if config.isCompress():
-                dataFileCheck = dataFileCheck + '.bz2'
-            if (not os.path.exists(dataFileCheck)) or config.isOverwrite():
-                task = {'name':name,
-                        'xls_file':xls_file,
-                        'dataFile':dataFile}
-                tasks.append(task)
+        dataFile = RAW_RDF_PATH + name + '.ttl'
+        dataFileCheck = dataFile
+        if config.isCompress():
+            dataFileCheck = dataFileCheck + '.bz2'
+        if (not os.path.exists(dataFileCheck)) or config.isOverwrite():
+            task = {'name':name,
+                    'xls_file':xls_file,
+                    'dataFile':dataFile}
+            tasks.append(task)
     
     # Call tablinker in parallel
     pool_size = multiprocessing.cpu_count() * 3
@@ -205,23 +203,23 @@ if __name__ == '__main__':
         os.makedirs(RELEASE_PATH)
         
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
-    #generate_raw_rdf()
-    
+    generate_raw_rdf()
+
     # Step 2 : push all the raw rdf to the triple store
-    #push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
-    
+    push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
+
     # Step 3 : generate harmonisation rules
-    #generate_harmonization_rules()
+    generate_harmonization_rules()
     
     # Step 4 : push the rules to virtuoso under the named graph for the rules
-    #push_to_virtuoso(config.get_graph_name('rules'), H_RULES_PATH + '/*')
-    
+    push_to_virtuoso(config.get_graph_name('rules'), H_RULES_PATH + '/*')
+
     # Step 5 : get the observations from all the cube and try to harmonize them
     create_harmonized_dataset()
-    
+
     # Step 6 : push the harmonized data and all additional files to the release
     push_to_virtuoso(config.get_graph_name('release'), RELEASE_PATH + '/*')
-    
+
     # Step 7 : update the cube DSD and push it
     update_dsd()
     add_to_virtuoso(config.get_graph_name('release'), RELEASE_PATH + '/extra.ttl.bz2')
