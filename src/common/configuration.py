@@ -50,6 +50,9 @@ class Configuration(object):
     def get_SPARQL(self):
         return self.config.get('general', 'sparql_endpoint')
     
+    def get_SPARUL(self):
+        return self.config.get('general', 'sparul_endpoint')
+    
     def get_prefixes(self):
         '''
         prefix tablink: <http://example.org/ns/tablink#> 
