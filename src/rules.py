@@ -32,7 +32,7 @@ class MappingsList(object):
         
         self.excelFileName = data['file']
         predicate = URIRef(data['predicate'])
-        prefix = data['prefix']
+        mapping_type = data['mapping_type']
         
         # Load the mappings
         wb = open_workbook(data['path'] + "/" + self.excelFileName, formatting_info=False, on_demand=True)
@@ -57,8 +57,20 @@ class MappingsList(object):
                     # Codes using numbers need to be seen as string
                     if type(value) == type(1.0):
                         value = str(int(value))
+                        
+                    # Encode the value
+                    encoded_value = None
+                    if mapping_type == 'uri':
+                        prefix = data['prefix']
+                        encoded_value = URIRef(prefix + value)
+                    elif mapping_type == 'boolean':
+                        isTrue = (value == '1' or value == 'true')
+                        encoded_value = Literal(isTrue)
+                    else:
+                        encoded_value = Literal(value)
+                        
                     # Prefix the code and pair with predicate
-                    pair = (predicate, URIRef(prefix + value))
+                    pair = (predicate, encoded_value)
                     values.append(pair)
                     
             # Save the mapping
@@ -263,10 +275,7 @@ class RuleMaker(object):
             self.log.debug("=> %s" % section)
             mappingsList = MappingsList(data)
             self.mappings[section] = mappingsList
-    
-    
-    
-                
+              
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
