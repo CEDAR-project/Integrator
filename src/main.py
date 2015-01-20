@@ -120,8 +120,10 @@ def generate_harmonization_rules_thread(parameters):
     dataset = parameters['dataset']
     output = parameters['output']
     log.info("Process " + dataset.n3())
-    rulesMaker = RuleMaker(config)
-    rulesMaker.process(dataset, output)
+    rulesMaker = RuleMaker(config, dataset, output)
+    rulesMaker.loadMappings("DataDump/mapping") 
+    rulesMaker.loadHeaders(True)
+    rulesMaker.process()
         
 def create_harmonized_dataset():
     '''

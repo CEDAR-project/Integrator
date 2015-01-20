@@ -3,6 +3,7 @@ import bz2
 import datetime
 import os
 import pprint
+import csv
 
 from rdflib import ConjunctiveGraph, RDF, URIRef
 from common.configuration import Configuration
@@ -12,7 +13,12 @@ from rdflib.namespace import RDFS
 from ConfigParser import SafeConfigParser
 from xlrd import open_workbook
 from xlutils.margins import number_of_good_cols, number_of_good_rows
-import requests
+
+import sys
+from common import util
+reload(sys)
+sys.setdefaultencoding("utf8")  # @UndefinedVariable
+
 
 pp = pprint.PrettyPrinter(indent=2)
 
@@ -20,6 +26,10 @@ pp = pprint.PrettyPrinter(indent=2)
 
 # Fetch all the headers using the corresponding query
 # Use literal+ds as key for mapping in MappingsList
+
+HEADERS_QUERY = 'Queries/get-headers.rq'
+HEADERS_CACHE_DIR = '_cache/'
+INTEGRATOR_URI = URIRef("https://github.com/CEDAR-project/Integrator")
 
 class MappingsList(object):
     
@@ -38,30 +48,29 @@ class MappingsList(object):
         for i in range(1, rowns):
             # Do we have a specific target ?
             target = sheet.cell(i, 0).value
-            if target == '':
-                target = 'Any'
             
-            # Get the string
-            literal = Literal(sheet.cell(i, 1).value)
+            # Get the string (force reading the cell as a string)
+            literal = sheet.cell(i, 1).value
+            if type(literal) == type(1.0):
+                literal = str(int(literal))
+            literal = util.clean_string(literal)
             
             # Get the values
             values = []
             for j in range(2, colns):
                 value = sheet.cell(i, j).value
-                if type(value) == type(1.0):
-                    value = str(int(value))
                 if value != '':
-                    pair = None
-                    if value == 'total':
-                        pair = (URIRef("http://bit.ly/cedar#isTotal"), Literal("1"))                        
-                    else:
-                        pair = (predicate, URIRef(prefix + value))
+                    # Codes using numbers need to be seen as string
+                    if type(value) == type(1.0):
+                        value = str(int(value))
+                    # Prefix the code and pair with predicate
+                    pair = (predicate, URIRef(prefix + value))
                     values.append(pair)
                     
             # Save the mapping
             if len(values) > 0:
-                self._mappings.setdefault(target, {})
-                self._mappings[target][literal] = values
+                self._mappings.setdefault(literal + target, {})
+                self._mappings[literal + target] = values
         
     def get_src_URI(self):
         """
@@ -74,30 +83,33 @@ class MappingsList(object):
     def get_file_name(self):
         return self.excelFileName
     
-    def get_mappings(self):
-        return self._mappings
+    def get_mappings_for(self, literal, target):
+        '''
+        Returns a set of pairs for a given string
+        '''
+        # If there is a specific mapping for this target return that one
+        if literal + target in self._mappings:
+            return self._mappings[literal + target]
+        
+        # If we have a mapping that works for all datasets return it
+        if literal in self._mappings:
+            return self._mappings[literal]
+         
+        # We have nothing
+        return None
     
 class RuleMaker(object):
-    def __init__(self, configuration, mappingFilesPath, outputPath):
+    def __init__(self, configuration, dataset, output_file_name):
         """
         Constructor
         """
         self.conf = configuration
         self.log = self.conf.getLogger("RuleMaker")
-        self.outputPath = outputPath
+        self.dataset = dataset
+        self.output_file_name = output_file_name
         self.mappings = {}
+        self.headers = []
         
-        # Read the metadata file
-        self.log.info("Loading mappings")
-        metadata = SafeConfigParser()
-        metadata.read(mappingFilesPath + "/metadata.txt")
-        for section in metadata.sections():
-            data = dict(metadata.items(section))
-            data['path'] = mappingFilesPath
-            self.log.info("=> %s" % section)
-            mappingsList = MappingsList(data)
-            self.mappings[section] = mappingsList
-            
         # Create a wrapper for SPARQL queries
         self.sparql = SPARQLWrap(self.conf)
 
@@ -108,115 +120,167 @@ class RuleMaker(object):
         if dims == None:
             dims = sorted(self.mappings.keys())
             
-        self.log.info("Start processing %s" % dims)
-        for dim in dims:
-            self.log.info("=> %s" % dim)
-            self._process_mapping(dim)
-            
-    def _process_mapping(self, dimension_name):
-        output_file = self.outputPath + "/" + dimension_name + '.nt'
-        out = bz2.BZ2File(output_file + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(output_file, "wb")
-        
-        mappings_list = self.mappings[dimension_name]
-        
-        # Mint a URI for the activity
-        dataset_uri = self.conf.getURI('cedar', 'raw-rdf') 
-        activity_URI = URIRef(dataset_uri + '-' + dimension_name + '-mapping-activity')
-        
-        # Keep the start time
-        startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                            datatype=self.conf.getURI('xsd', 'dateTime'))
-                
-        for (scope, mappings_pairs) in mappings_list.get_mappings().iteritems():
-            for (literal, pairs) in mappings_pairs.iteritems():
-                self._process_mapping_entry(activity_URI, scope, literal, pairs, out)
-            
-        # Keep the end time
-        endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                            datatype=self.conf.getURI('xsd', 'dateTime'))
-        
+        # The graph for the results
         graph = ConjunctiveGraph()
         self.conf.bindNamespaces(graph)
         
+        # Mint a URI for the activity
+        activity_URI = URIRef(self.dataset + '-mapping-activity')
+
+        # Keep the start time
+        startTime = self._now()
+            
+        self.log.info("Start processing %s" % dims)
+        for dim in dims:
+            self.log.debug("=> %s" % dim)
+            count = self._process_mapping(graph, activity_URI, dim)
+            
+            if count != 0:
+                # Describe the file used
+                mappingFileDSURI = activity_URI + '-' + dim 
+                mappingFileDistURI = mappingFileDSURI + '-dist'
+                graph.add((activity_URI, self.conf.getURI('prov', 'used'), mappingFileDSURI))
+                graph.add((mappingFileDSURI, RDF.type, self.conf.getURI('dcat', 'Dataset')))
+                graph.add((mappingFileDSURI, RDFS.label, Literal(dim)))
+                graph.add((mappingFileDSURI, self.conf.getURI('dcat', 'distribution'), mappingFileDistURI))
+                graph.add((mappingFileDistURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
+                graph.add((mappingFileDistURI, RDFS.label, Literal(self.mappings[dim].get_file_name())))
+                graph.add((mappingFileDistURI, self.conf.getURI('dcterms', 'accessURL'), self.mappings[dim].get_src_URI()))
+            
+        # Keep the end time
+        endTime = self._now()
+        
         # Finish describing the activity
         graph.add((activity_URI, RDF.type, self.conf.getURI('prov', 'Activity')))
-        graph.add((activity_URI, RDFS.label, Literal("Annotate for " + dimension_name)))
+        graph.add((activity_URI, RDFS.label, Literal("Annotate")))
         graph.add((activity_URI, self.conf.getURI('prov', 'startedAtTime'), startTime))
         graph.add((activity_URI, self.conf.getURI('prov', 'endedAtTime'), endTime))
-        graph.add((activity_URI, self.conf.getURI('prov', 'wasAssociatedWith'), URIRef("https://github.com/CEDAR-project/Integrator")))
-        mappingFileDistURI = URIRef(dataset_uri + '-' + dimension_name + '-dist')
-        graph.add((activity_URI, self.conf.getURI('prov', 'used'), mappingFileDistURI))
-        graph.add((mappingFileDistURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
-        graph.add((mappingFileDistURI, RDFS.label, Literal(mappings_list.get_file_name())))
-        graph.add((mappingFileDistURI, self.conf.getURI('dcterms', 'accessURL'), mappings_list.get_src_URI()))
-        graph.serialize(destination=out, format='nt')
-        out.close() 
+        graph.add((activity_URI, self.conf.getURI('prov', 'wasAssociatedWith'), INTEGRATOR_URI))
 
-    def _process_mapping_entry(self, activity_URI, scope, literal, pairs, out):
-        self.log.debug("==> %s" % literal.n3())
-        query = """
-        CONSTRUCT {
-            `iri(bif:concat(?cell,"-mapping"))` a oa:Annotation;
-                rdfs:label "Mapping";
-                oa:hasBody `iri(bif:concat(?cell,"-mapping-body"))`;
-                oa:hasTarget ?cell;
-                oa:serializedAt ?date;
-                oa:serializedBy <https://github.com/CEDAR-project/Integrator> ;
-                prov:wasGeneratedBy __MAPPING_ACTIVITY__ .
-            `iri(bif:concat(?cell,"-mapping-body"))` a rdfs:Resource;
-                rdfs:label "Mapping body";
-                __PAIRS__
-        } 
-        FROM <RAW-DATA>
-        WHERE {
-            ?cell a ?header.
-            ?cell tablink:value __LITERAL__.
-            __SCOPE__
-            FILTER (?header in (tablink:RowHeader,tablink:ColumnHeader))
-            BIND (now() AS ?date)
-        }"""
-        # Set the graph name
-        query = query.replace('RAW-DATA', self.conf.get_graph_name('raw-data'))
+        # Save the graph
+        self.log.info("Saving {} data triples.".format(len(graph)))
+        try :
+            out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.output_file_name, "w")
+            graph.serialize(destination=out, format='n3')
+            out.close()
+        except :
+            self.log.error(self.basename + "Whoops! Something went wrong in serialising to output file")
+            
+    def _process_mapping(self, graph, activity_URI, dimension_name):
+        count = 0
         
-        # Set the activity
-        query = query.replace('__MAPPING_ACTIVITY__', activity_URI.n3())
+        # Process all the headers one by one
+        mappings_list = self.mappings[dimension_name]
+        for header in self.headers:
+            [cell_name, literal, _, dataset_name] = header
+            pairs = mappings_list.get_mappings_for(literal, dataset_name)
+            if pairs != None:
+                count = count + 1
+                # Mint URIs
+                annotation_URI = URIRef(cell_name + "-mapping")
+                annotation_body_URI = annotation_URI + "-body"
+                # Add the triples
+                graph.add((annotation_URI, RDF.type, self.conf.getURI('oa', 'Annotation')))
+                graph.add((annotation_URI, RDFS.label, Literal('Mapping')))
+                graph.add((annotation_URI, self.conf.getURI('oa', 'hasBody'), annotation_body_URI))
+                graph.add((annotation_URI, self.conf.getURI('oa', 'hasTarget'), URIRef(cell_name)))
+                graph.add((annotation_URI, self.conf.getURI('oa', 'serializedAt'), self._now()))
+                graph.add((annotation_URI, self.conf.getURI('oa', 'serializedBy'), INTEGRATOR_URI))
+                graph.add((annotation_URI, self.conf.getURI('prov', 'wasGeneratedBy'), activity_URI))
+                graph.add((annotation_body_URI, RDF.type, RDFS.Resource))
+                graph.add((annotation_body_URI, RDFS.label, Literal('Mapping body')))
+                for pair in pairs:
+                    (p,o) = pair
+                    graph.add((annotation_body_URI, p, o))
+                     
+        return count
+               
+    def _now(self):
+        '''
+        Return the current time formated as a typed Literal
+        '''
+        return Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 
+                       datatype=self.conf.getURI('xsd', 'dateTime'))
         
-        # Set the scope
-        scope_str = ''
-        if scope != 'Any':
-            scope_str = """
-                ?cell tablink:sheet ?sheet. 
-                ?ds dcterms:hasPart ?sheet.
-                ?ds rdfs:label \"%s\". """ % scope
-        query = query.replace('__SCOPE__', scope_str)
+    def loadHeaders(self, refresh=False):
+        '''
+        This method fetches all the header used in the raw data and
+        saves them as a cache in a CSV file
+        @input refresh is used to force the refresh of the cache
+        '''
+        self.log.info("[%s] Loading headers" % self.dataset)
         
-        # Set the literal
-        query = query.replace('__LITERAL__', literal.n3())
+        # Compose the name of the cache file
+        cache_file_name = HEADERS_CACHE_DIR + self.dataset.split('/')[-1] + '-headers.csv'
         
-        # Set the pairs
-        pairs_txt = ""
-        for index in range(0, len(pairs)):
-            (p, o) = pairs[index]
-            pairs_txt = pairs_txt + p.n3() + " " + o.n3()
-            if index == len(pairs) - 1:
-                pairs_txt = pairs_txt + "."
-            else:
-                pairs_txt = pairs_txt + ";"
-        query = query.replace('__PAIRS__', pairs_txt)
+        # See if we have a cached copy of the headers 
+        # or if we must reload them anyway
+        if not os.path.exists(cache_file_name) or refresh:
+            self.log.debug("[%s] => Refreshing the cache" % self.dataset)
+            
+            # Create the cache directory if necessary
+            if not os.path.exists(os.path.dirname(cache_file_name)):
+                os.makedirs(os.path.dirname(cache_file_name))
+            
+            # Load and execute the SPARQL query, save to the cache too
+            sparql_query = open(HEADERS_QUERY, 'r').read()
+            sparql_params = {'__DATA_SET__' : self.dataset.n3() }
+            cache_file = open(cache_file_name, 'wb')
+            csv_writer = csv.writer(cache_file, delimiter=';', quotechar='"')
+            results = self.sparql.run_select(sparql_query, sparql_params)
+            for result in results:
+                # Parse the result
+                cell_name = result['cell']['value']
+                header_type = result['header_type']['value']
+                dataset_name = result['dataset_name']['value']
+                # TODO remove the clean string once done up-front by tablink
+                literal = util.clean_string(result['literal']['value'])
+                row = [cell_name, literal, header_type, dataset_name]
+                # Save to the cache
+                csv_writer.writerow(row)
+                # Save to the headers list
+                self.headers.append(row)
+            cache_file.close()
+        else:
+            self.log.debug("[%s] => Loading cached data" % self.dataset)
+            with open(cache_file_name, 'rb') as cache_file:
+                csv_reader = csv.reader(cache_file, delimiter=';', quotechar='"')
+                for row in csv_reader:
+                    self.headers.append(row)        
+
+        self.log.info("[%s] => %d results" % (self.dataset, len(self.headers)))
         
-        # Add the namespaces
-        query = self.conf.get_prefixes() + query
-        
-        # Launch the query and stream back the output to the file
-        server = self.conf.get_SPARQL()
-        r = requests.post(server, auth=('rdfread', 'red_fred'), data={'query' : query, 'format':'text/plain'}, stream=True)
-        for chunk in r.iter_content(2048):
-            out.write(chunk)
+    def loadMappings(self, mappingFilesPath, sections=None):
+        '''
+        Loads all the mapping files present in a given directory. The metadata
+        file is used to get the list of the files to load and also the
+        additional information such as the predicate name and the prefix
+        @input sections filter the sections to load
+        '''
+        # Read the metadata file
+        self.log.info("Loading mappings")
+        metadata = SafeConfigParser()
+        metadata.read(mappingFilesPath + "/metadata.txt")
+        for section in metadata.sections():
+            if sections != None and section not in sections:
+                continue
+            data = dict(metadata.items(section))
+            data['path'] = mappingFilesPath
+            self.log.debug("=> %s" % section)
+            mappingsList = MappingsList(data)
+            self.mappings[section] = mappingsList
+    
+    
+    
                 
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
     
+    dataset = config.getURI('cedar',"BRT_1889_02_T1")
+    
     # Test
-    rulesMaker = RuleMaker(config, "DataDump/mapping", "/tmp")
-    rulesMaker.process() # ['Sex']
+    rulesMaker = RuleMaker(config, dataset, "/tmp/test.ttl")
+    rulesMaker.loadMappings("DataDump/mapping") #, ['Sex','MaritalStatus']
+    rulesMaker.loadHeaders()
+    rulesMaker.process() # ['Sex','MaritalStatus']
