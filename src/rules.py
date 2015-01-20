@@ -18,6 +18,9 @@ pp = pprint.PrettyPrinter(indent=2)
 
 # TODO add rdfs:label to everything
 
+# Fetch all the headers using the corresponding query
+# Use literal+ds as key for mapping in MappingsList
+
 class MappingsList(object):
     
     def __init__(self, data):
