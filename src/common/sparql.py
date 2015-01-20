@@ -1,6 +1,8 @@
 from SPARQLWrapper import SPARQLWrapper, JSON
 from rdflib.term import URIRef, Literal
 
+PAGE_SIZE = 10000
+
 class SPARQLWrap(object):
     def __init__(self, configuration):
         '''
@@ -16,17 +18,29 @@ class SPARQLWrap(object):
         '''
         Execute a SPARQL select
         '''
+        total_results = []
+        offset = 0
         sparql = SPARQLWrapper(self.conf.get_SPARQL())
+        sparql.setReturnFormat(JSON)
+        sparql.setCredentials('rdfread', 'red_fred')
         if params != None:
             for (k,v) in params.iteritems():
                 query = query.replace(k,v)
         query = self.prefixes + query
-        sparql.setQuery(query)
-        sparql.setReturnFormat(JSON)
-        sparql.setCredentials('rdfread', 'red_fred')
-        results = sparql.query().convert()
-        return results["results"]["bindings"]
-
+        
+        # Run the query page per page
+        next_page = True
+        while next_page:
+            page_query = "%s LIMIT %d OFFSET %d" % (query, PAGE_SIZE, offset)
+            sparql.setQuery(page_query)
+            page_results = sparql.query().convert()
+            total_results.append(page_results["results"]["bindings"])
+            nb_results = len(page_results["results"]["bindings"])
+            next_page = (nb_results == PAGE_SIZE)
+            offset = offset + PAGE_SIZE
+        
+        return total_results
+    
     def run_construct(self, query, params = None):
         '''
         Execute a SPARQL construct
