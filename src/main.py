@@ -12,7 +12,7 @@ from rules import RuleMaker
 from cubes import CubeMaker
 
 # All the paths
-MARKED_XLS_FILES = "DataDump/xls-marked/*.xls"  # Marked XLS
+MARKED_XLS_FILES = "DataDump/xls-marked/*.ods"  # Marked XLS
 MAPPINGS = "DataDump/mapping/"  # All the mapping
 RAW_RDF_PATH = "DataDump/raw-rdf/"  # The raw RDF for the marked XLS
 H_RULES_PATH = "DataDump/rules/"  # The harmonisation rules
@@ -61,7 +61,7 @@ def generate_raw_rdf():
             tasks.append(task)
     
     # Call tablinker in parallel
-    pool_size = multiprocessing.cpu_count() * 3
+    pool_size = multiprocessing.cpu_count() * 2
     pool = multiprocessing.Pool(processes=pool_size)
     pool.map(generate_raw_rdf_thread, tasks)
     pool.close()
@@ -204,7 +204,7 @@ if __name__ == '__main__':
         
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
     generate_raw_rdf()
-
+    
     # Step 2 : push all the raw rdf to the triple store
     push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
 
