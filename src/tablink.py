@@ -18,6 +18,7 @@ import pprint
 import sys
 from common.configuration import Configuration
 from rdflib.namespace import RDFS
+from common import util
 reload(sys)
 import traceback
 sys.setdefaultencoding("utf8")  # @UndefinedVariable
@@ -344,7 +345,7 @@ class TabLink(object):
         """
         Create relevant triples for the cell marked as Title 
         """
-        self.graph.add((cell['sheetURI'], self.conf.getURI('rdfs', 'comment'), Literal(cell['value'])))        
+        self.graph.add((cell['sheetURI'], self.conf.getURI('rdfs', 'comment'), Literal(util.clean_string(cell['value']))))        
     
     def handleAnnotation(self, cell) :
         """
@@ -376,12 +377,12 @@ class TabLink(object):
                         ))
         self.graph.add((body,
                         self.conf.getURI('tablink', 'value'),
-                        Literal(annot.text.encode('utf-8'))
+                        Literal(util.clean_string(annot.text).encode('utf-8'))
                         ))
         if annot.author.encode('utf-8') != "":
             self.graph.add((annotation,
                             self.conf.getURI('oa', 'annotatedBy'),
-                            Literal(annot.author.encode('utf-8'))
+                            Literal(util.clean_string(annot.author).encode('utf-8'))
                             ))
         self.graph.add((annotation,
                         self.conf.getURI('oa', 'serializedBy'),
@@ -456,7 +457,7 @@ class TabLink(object):
         """
         
         # Set the value
-        value = Literal(str(cell['value']))
+        value = Literal(util.clean_string(cell['value']))
             
         # It's a cell
         self.graph.add((cell['URI'], RDF.type, cell_type))

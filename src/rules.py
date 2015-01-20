@@ -280,7 +280,7 @@ if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
     
-    dataset = config.getURI('cedar',"BRT_1889_02_T1")
+    dataset = config.getURI('cedar',"BRT_1889_02_T1-S0")
     
     # Test
     rulesMaker = RuleMaker(config, dataset, "/tmp/test.ttl")
