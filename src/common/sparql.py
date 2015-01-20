@@ -18,6 +18,23 @@ class SPARQLWrap(object):
         '''
         Execute a SPARQL select
         '''
+        sparql = SPARQLWrapper(self.conf.get_SPARQL())
+        if params != None:
+            for (k,v) in params.iteritems():
+                query = query.replace(k,v)
+        query = self.prefixes + query
+        
+        sparql.setQuery(query)
+        sparql.setReturnFormat(JSON)
+        sparql.setCredentials('rdfread', 'red_fred')
+        results = sparql.query().convert()
+        
+        return results["results"]["bindings"]
+    
+    def run_select_paginated(self, query, params = None):
+        '''
+        Execute a SPARQL select
+        '''
         total_results = []
         offset = 0
         sparql = SPARQLWrapper(self.conf.get_SPARQL())
@@ -34,7 +51,7 @@ class SPARQLWrap(object):
             page_query = "%s LIMIT %d OFFSET %d" % (query, PAGE_SIZE, offset)
             sparql.setQuery(page_query)
             page_results = sparql.query().convert()
-            total_results.append(page_results["results"]["bindings"])
+            total_results = total_results + page_results["results"]["bindings"]
             nb_results = len(page_results["results"]["bindings"])
             next_page = (nb_results == PAGE_SIZE)
             offset = offset + PAGE_SIZE
