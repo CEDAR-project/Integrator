@@ -12,7 +12,7 @@ from rules import RuleMaker
 from cubes import CubeMaker
 
 # All the paths
-MARKED_XLS_FILES = "DataDump/xls-marked/*.ods"  # Marked XLS
+ODS_FILES = "DataDump/source-data/*.ods"  # Marked XLS
 MAPPINGS = "DataDump/mapping/"  # All the mapping
 RAW_RDF_PATH = "DataDump/raw-rdf/"  # The raw RDF for the marked XLS
 H_RULES_PATH = "DataDump/rules/"  # The harmonisation rules
@@ -48,7 +48,7 @@ def generate_raw_rdf():
     tasks = []
     
     # Go check all the files one by one, push a task if needed
-    for xls_file in sorted(glob.glob(MARKED_XLS_FILES)):
+    for xls_file in sorted(glob.glob(ODS_FILES)):
         name = os.path.basename(xls_file).split('.')[0]
         dataFile = RAW_RDF_PATH + name + '.ttl'
         dataFileCheck = dataFile
@@ -61,7 +61,7 @@ def generate_raw_rdf():
             tasks.append(task)
     
     # Call tablinker in parallel
-    pool_size = multiprocessing.cpu_count() * 2
+    pool_size = multiprocessing.cpu_count()
     pool = multiprocessing.Pool(processes=pool_size)
     pool.map(generate_raw_rdf_thread, tasks)
     pool.close()
@@ -203,10 +203,10 @@ if __name__ == '__main__':
         os.makedirs(RELEASE_PATH)
         
     # Step 1 : combine the raw xls files and the marking information to produce raw rdf
-    generate_raw_rdf()
+    # generate_raw_rdf()
     
     # Step 2 : push all the raw rdf to the triple store
-    push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
+    # push_to_virtuoso(config.get_graph_name('raw-data'), RAW_RDF_PATH + '/*')
 
     # Step 3 : generate harmonisation rules
     generate_harmonization_rules()

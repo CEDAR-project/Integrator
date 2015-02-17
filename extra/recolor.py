@@ -229,14 +229,14 @@ def recolor(fileName, markingFileName, outputFileName):
     
 if __name__ == "__main__":
     # Run one
-    recolor(unicode(sys.argv[1]), unicode(sys.argv[2]), unicode(sys.argv[3]))
+    #recolor(unicode(sys.argv[1]), unicode(sys.argv[2]), unicode(sys.argv[3]))
     
     # Process everything
-    #for inputFileName in sorted(glob.glob('./data/input/odf/*.odf')):
-    #    markingFileName = inputFileName.replace('.odf', '.txt').replace('/odf','/marking')
-    #    outFileNameODS = inputFileName.replace('/odf','/spreadsheets').replace('odf','ods')
-    #    if not os.path.exists(outFileNameODS):
-    #        recolor(unicode(inputFileName), unicode(markingFileName), unicode(outFileNameODS))
+    for inputFileName in sorted(glob.glob('/tmp/census/*.ods')):
+        markingFileName = inputFileName.replace('.ods', '.txt')
+        outFileNameODS = inputFileName.replace('census','new')
+        if not os.path.exists(outFileNameODS):
+            recolor(unicode(inputFileName), unicode(markingFileName), unicode(outFileNameODS))
 
 # Test cases
 # BRT_1889_08_T4 -> Bug
