@@ -126,8 +126,10 @@ class TabLink(object):
                     self.graph.add((sheetURI, RDFS.label, Literal(sheets[n].getAttrNS(TABLENS, 'name'))))
                     # Add it to the dataset
                     sheetURIs.append(sheetURI)
-            except:
+            except Exception as detail:
                 self.log.error("Error processing sheet %d of %s" % (n, self.basename))
+                self.log.error(sys.exc_info()[0])
+                self.log.error(detail)
             
         # end time for the conversion process
         endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -274,8 +276,9 @@ class TabLink(object):
                 
         # Relate all the row properties to their row headers
         for rowDimension in rowDimensions:
-                for (p, v) in rowDimensions[rowDimension].iteritems():
-                    self.graph.add((v, self.conf.getURI('tablink', 'parentCell'), p))
+                for (p, vs) in rowDimensions[rowDimension].iteritems():
+                    for v in vs:
+                        self.graph.add((v, self.conf.getURI('tablink', 'parentCell'), p))
         
         # Add additional information about the hierarchy of column headers
         # for value in columnDimensions.values():
@@ -306,8 +309,9 @@ class TabLink(object):
             
         # Bind all the row dimensions
         try :
-            for dim in rowDimensions[cell['i']].itervalues():
-                self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
+            for dims in rowDimensions[cell['i']].itervalues():
+                for dim in dims:
+                    self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
         except KeyError :
             self.log.debug("({},{}) No row dimension for cell".format(cell['i'], cell['j']))
         
@@ -335,7 +339,8 @@ class TabLink(object):
         prop = rowProperties[j]
 
         rowDimensions.setdefault(i, {})
-        rowDimensions[i][prop] = cell['URI']
+        rowDimensions[i].setdefault(prop, [])
+        rowDimensions[i][prop].append(cell['URI'])
  
     
     def handleHRowHeader(self, cell, rowDimensions, rowProperties) :
@@ -355,7 +360,8 @@ class TabLink(object):
             # If the cell is exactly 'id.', add the value of the row header above it.
             try:
                 rowDimensions.setdefault(i, {})
-                rowDimensions[i][prop] = rowDimensions[i - 1][prop]
+                rowDimensions[i].setdefault(prop, [])
+                rowDimensions[i][prop].append(rowDimensions[i - 1][prop][0])
             except:
                 pass
             # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
@@ -363,7 +369,8 @@ class TabLink(object):
             # Add the cell to the graph
             self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
             rowDimensions.setdefault(i, {})
-            rowDimensions[i][prop] = cell['URI']
+            rowDimensions[i].setdefault(prop, [])
+            rowDimensions[i][prop].append(cell['URI'])
             # self.log.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowValues[i]))
 
         # Look if we cover other cells verticaly 
@@ -374,7 +381,8 @@ class TabLink(object):
                 spanned_row = cell['i'] + extra
                 self.log.debug("Span over ({},{})".format(spanned_row, cell['j']))
                 rowDimensions.setdefault(spanned_row, {})
-                rowDimensions[spanned_row][prop] = cell['URI']
+                rowDimensions[spanned_row].setdefault(prop, [])
+                rowDimensions[spanned_row][prop].append(cell['URI'])
     
     def handleColHeader(self, cell, columnDimensions) :
         """
@@ -481,6 +489,7 @@ if __name__ == '__main__':
     
     # Test
     inputFile = "data-test/simple.ods"
+    #inputFile = "data-test/VT_1899_07_H1.ods"
     dataFile = "/tmp/data.ttl"
 
     tLinker = TabLink(config, inputFile, dataFile, processAnnotations=True)
