@@ -40,8 +40,8 @@ class MappingsList(object):
         colns = number_of_good_cols(sheet)
         rowns = number_of_good_rows(sheet)
         for i in range(1, rowns):
-            # Do we have a specific target ?
-            target = sheet.cell(i, 0).value
+            # Get the context (first column)
+            context = sheet.cell(i, 0).value
             
             # Get the string (force reading the cell as a string)
             literal = sheet.cell(i, 1).value
@@ -75,8 +75,14 @@ class MappingsList(object):
                     
             # Save the mapping
             if len(values) > 0:
-                self._mappings.setdefault(literal + target, {})
-                self._mappings[literal + target] = values
+                self._mappings.setdefault(literal, {})
+                # Store the default mappings
+                self._mappings[literal]['default'] = values
+                # Store the specific context if applicable
+                if context != '':
+                    self._mappings[literal]['context'].setdefault({})
+                    self._mappings[literal]['context'][context] = values
+                    
         
     def get_src_URI(self):
         """
@@ -89,19 +95,25 @@ class MappingsList(object):
     def get_file_name(self):
         return self.excelFileName
     
-    def get_mappings_for(self, literal, target):
+    def get_mappings_for(self, literal, context_map):
         '''
         Returns a set of pairs for a given string
         '''
-        # If there is a specific mapping for this target return that one
-        if literal + target in self._mappings:
-            return self._mappings[literal + target]
+        # If we don't have a mapping return nothing
+        if literal not in self._mappings:
+            return None
         
-        # If we have a mapping that works for all datasets return it
-        if literal in self._mappings:
-            return self._mappings[literal]
-         
-        # We have nothing
+        # If there is no context cases just return the default
+        if 'context' not in self._mappings[literal]:
+            return self._mappings[literal]['default']
+        
+        # Check for all the possible context, starting with the most specific
+        for key in ['cell','sheet','dataset']:
+            context = '%s=%s' % (key, context_map[key])
+            if context in self._mappings[literal]['context']:
+                return self._mappings[literal]['context'][context]
+        
+        # Nothing matches
         return None
     
 class RuleMaker(object):
@@ -136,7 +148,7 @@ class RuleMaker(object):
         # Keep the start time
         startTime = self._now()
             
-        self.log.info("Start processing %s" % dims)
+        self.log.debug("Start processing %s" % dims)
         for dim in dims:
             self.log.debug("=> %s" % dim)
             count = self._process_mapping(graph, activity_URI, dim)
@@ -164,7 +176,7 @@ class RuleMaker(object):
         graph.add((activity_URI, self.conf.getURI('prov', 'wasAssociatedWith'), INTEGRATOR_URI))
 
         # Save the graph
-        self.log.info("Saving {} data triples.".format(len(graph)))
+        self.log.info("[{}] Saving {} data triples.".format(self.dataset, len(graph)))
         try :
             out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.output_file_name, "w")
             graph.serialize(destination=out, format='n3')
@@ -178,8 +190,11 @@ class RuleMaker(object):
         # Process all the headers one by one
         mappings_list = self.mappings[dimension_name]
         for header in self.headers:
-            [cell_name, literal, _, dataset_name] = header
-            pairs = mappings_list.get_mappings_for(literal, dataset_name)
+            [cell, literal, _, cell_name, sheet_name, dataset_name] = header
+            context_map = {'cell' : cell_name,
+                           'sheet': sheet_name,
+                           'dataset' : dataset_name}
+            pairs = mappings_list.get_mappings_for(literal, context_map)
             if pairs != None:
                 count = count + 1
                 # Mint URIs
@@ -189,7 +204,7 @@ class RuleMaker(object):
                 graph.add((annotation_URI, RDF.type, self.conf.getURI('oa', 'Annotation')))
                 graph.add((annotation_URI, RDFS.label, Literal('Mapping')))
                 graph.add((annotation_URI, self.conf.getURI('oa', 'hasBody'), annotation_body_URI))
-                graph.add((annotation_URI, self.conf.getURI('oa', 'hasTarget'), URIRef(cell_name)))
+                graph.add((annotation_URI, self.conf.getURI('oa', 'hasTarget'), URIRef(cell)))
                 graph.add((annotation_URI, self.conf.getURI('oa', 'serializedAt'), self._now()))
                 graph.add((annotation_URI, self.conf.getURI('oa', 'serializedBy'), INTEGRATOR_URI))
                 graph.add((annotation_URI, self.conf.getURI('prov', 'wasGeneratedBy'), activity_URI))
@@ -236,12 +251,14 @@ class RuleMaker(object):
             results = self.sparql.run_select(sparql_query, sparql_params)
             for result in results:
                 # Parse the result
-                cell_name = result['cell']['value']
+                cell = result['cell']['value']
+                cell_name = cell.split('/')[-1]
                 header_type = result['header_type']['value']
                 dataset_name = result['dataset_name']['value']
+                sheet_name = self.dataset.split('/')[-1] 
                 # TODO remove the clean string once done up-front by tablink
                 literal = util.clean_string(result['literal']['value'])
-                row = [cell_name, literal, header_type, dataset_name]
+                row = [cell_name, literal, header_type, cell_name, sheet_name, dataset_name]
                 # Save to the cache
                 csv_writer.writerow(row)
                 # Save to the headers list
@@ -286,5 +303,5 @@ if __name__ == '__main__':
     # Test
     rulesMaker = RuleMaker(config, dataset, "/tmp/test.ttl")
     rulesMaker.loadMappings("DataDump/mapping") #, ['Sex','MaritalStatus']
-    rulesMaker.loadHeaders()
+    rulesMaker.loadHeaders(True)
     rulesMaker.process() # ['Sex','MaritalStatus']

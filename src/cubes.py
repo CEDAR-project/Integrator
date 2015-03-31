@@ -166,6 +166,7 @@ class CubeMaker(object):
                         'RULES'    : self.conf.get_graph_name('rules')}
         
         # Prepare the SPARQL construct
+        # FIXME With this construct the observation also get the rdfs:label of the mapping body
         query = """
         CONSTRUCT {
             <SLICE> qb:observation `iri(bif:concat(?cell,"-h"))`.
