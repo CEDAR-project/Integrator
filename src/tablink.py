@@ -341,6 +341,17 @@ class TabLink(object):
         rowDimensions.setdefault(i, {})
         rowDimensions[i].setdefault(prop, [])
         rowDimensions[i][prop].append(cell['URI'])
+        
+        # Look if we cover other cells verticaly 
+        rows_spanned = cell['cell'].getAttrNS(TABLENS, 'number-rows-spanned')
+        if rows_spanned != None:
+            rows_spanned = int(rows_spanned)
+            for extra in range(1, rows_spanned):
+                spanned_row = cell['i'] + extra
+                self.log.debug("Span over ({},{})".format(spanned_row, cell['j']))
+                rowDimensions.setdefault(spanned_row, {})
+                rowDimensions[spanned_row].setdefault(prop, [])
+                rowDimensions[spanned_row][prop].append(cell['URI'])
  
     
     def handleHRowHeader(self, cell, rowDimensions, rowProperties) :
