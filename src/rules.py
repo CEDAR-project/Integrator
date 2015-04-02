@@ -80,7 +80,7 @@ class MappingsList(object):
                 self._mappings[literal]['default'] = values
                 # Store the specific context if applicable
                 if context != '':
-                    self._mappings[literal]['context'].setdefault({})
+                    self._mappings[literal].setdefault('context', {})
                     self._mappings[literal]['context'][context] = values
                     
         
@@ -135,54 +135,58 @@ class RuleMaker(object):
         '''
         Function used to process one of the sheets in the data sets
         '''
-        if dims == None:
-            dims = sorted(self.mappings.keys())
+        try:
+            if dims == None:
+                dims = sorted(self.mappings.keys())
+                
+            # The graph for the results
+            graph = ConjunctiveGraph()
+            self.conf.bindNamespaces(graph)
             
-        # The graph for the results
-        graph = ConjunctiveGraph()
-        self.conf.bindNamespaces(graph)
+            # Mint a URI for the activity
+            activity_URI = URIRef(self.dataset + '-mapping-activity')
+    
+            # Keep the start time
+            startTime = self._now()
+                
+            self.log.debug("Start processing %s" % dims)
+            for dim in dims:
+                self.log.debug("=> %s" % dim)
+                count = self._process_mapping(graph, activity_URI, dim)
+                
+                if count != 0:
+                    # Describe the file used
+                    mappingFileDSURI = activity_URI + '-' + dim 
+                    mappingFileDistURI = mappingFileDSURI + '-dist'
+                    graph.add((activity_URI, self.conf.getURI('prov', 'used'), mappingFileDSURI))
+                    graph.add((mappingFileDSURI, RDF.type, self.conf.getURI('dcat', 'Dataset')))
+                    graph.add((mappingFileDSURI, RDFS.label, Literal(dim)))
+                    graph.add((mappingFileDSURI, self.conf.getURI('dcat', 'distribution'), mappingFileDistURI))
+                    graph.add((mappingFileDistURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
+                    graph.add((mappingFileDistURI, RDFS.label, Literal(self.mappings[dim].get_file_name())))
+                    graph.add((mappingFileDistURI, self.conf.getURI('dcterms', 'accessURL'), self.mappings[dim].get_src_URI()))
+                
+            # Keep the end time
+            endTime = self._now()
+            
+            # Finish describing the activity
+            graph.add((activity_URI, RDF.type, self.conf.getURI('prov', 'Activity')))
+            graph.add((activity_URI, RDFS.label, Literal("Annotate")))
+            graph.add((activity_URI, self.conf.getURI('prov', 'startedAtTime'), startTime))
+            graph.add((activity_URI, self.conf.getURI('prov', 'endedAtTime'), endTime))
+            graph.add((activity_URI, self.conf.getURI('prov', 'wasAssociatedWith'), INTEGRATOR_URI))
+    
+            # Save the graph
+            self.log.info("[{}] Saving {} data triples.".format(self.dataset, len(graph)))
+            try :
+                out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.output_file_name, "w")
+                graph.serialize(destination=out, format='n3')
+                out.close()
+            except :
+                self.log.error(self.basename + "Whoops! Something went wrong in serialising to output file")
         
-        # Mint a URI for the activity
-        activity_URI = URIRef(self.dataset + '-mapping-activity')
-
-        # Keep the start time
-        startTime = self._now()
-            
-        self.log.debug("Start processing %s" % dims)
-        for dim in dims:
-            self.log.debug("=> %s" % dim)
-            count = self._process_mapping(graph, activity_URI, dim)
-            
-            if count != 0:
-                # Describe the file used
-                mappingFileDSURI = activity_URI + '-' + dim 
-                mappingFileDistURI = mappingFileDSURI + '-dist'
-                graph.add((activity_URI, self.conf.getURI('prov', 'used'), mappingFileDSURI))
-                graph.add((mappingFileDSURI, RDF.type, self.conf.getURI('dcat', 'Dataset')))
-                graph.add((mappingFileDSURI, RDFS.label, Literal(dim)))
-                graph.add((mappingFileDSURI, self.conf.getURI('dcat', 'distribution'), mappingFileDistURI))
-                graph.add((mappingFileDistURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
-                graph.add((mappingFileDistURI, RDFS.label, Literal(self.mappings[dim].get_file_name())))
-                graph.add((mappingFileDistURI, self.conf.getURI('dcterms', 'accessURL'), self.mappings[dim].get_src_URI()))
-            
-        # Keep the end time
-        endTime = self._now()
-        
-        # Finish describing the activity
-        graph.add((activity_URI, RDF.type, self.conf.getURI('prov', 'Activity')))
-        graph.add((activity_URI, RDFS.label, Literal("Annotate")))
-        graph.add((activity_URI, self.conf.getURI('prov', 'startedAtTime'), startTime))
-        graph.add((activity_URI, self.conf.getURI('prov', 'endedAtTime'), endTime))
-        graph.add((activity_URI, self.conf.getURI('prov', 'wasAssociatedWith'), INTEGRATOR_URI))
-
-        # Save the graph
-        self.log.info("[{}] Saving {} data triples.".format(self.dataset, len(graph)))
-        try :
-            out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.output_file_name, "w")
-            graph.serialize(destination=out, format='n3')
-            out.close()
-        except :
-            self.log.error(self.basename + "Whoops! Something went wrong in serialising to output file")
+        except:
+            self.log.error("[{}] Something bad happened: {}".format(self.dataset, sys.exc_info()[0]))
             
     def _process_mapping(self, graph, activity_URI, dimension_name):
         count = 0
@@ -287,18 +291,22 @@ class RuleMaker(object):
         for section in metadata.sections():
             if sections != None and section not in sections:
                 continue
-            data = dict(metadata.items(section))
-            data['path'] = mappingFilesPath
-            self.log.debug("=> %s" % section)
-            mappingsList = MappingsList(data)
-            self.mappings[section] = mappingsList
+            try:
+                self.log.debug("=> %s" % section)
+                data = dict(metadata.items(section))
+                data['path'] = mappingFilesPath
+                mappingsList = MappingsList(data)
+                self.mappings[section] = mappingsList
+            except:
+                self.log.error("[{}] Something bad happened with {} : {}".format(self.dataset, section, sys.exc_info()[0]))
               
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
     
     #dataset = config.getURI('cedar',"BRT_1889_02_T1-S0")
-    dataset = config.getURI('cedar',"VT_1869_01_H1-S0")
+    #dataset = config.getURI('cedar',"VT_1869_01_H1-S0")
+    dataset = config.getURI('cedar','VT_1879_01_H1-S0')
     
     # Test
     rulesMaker = RuleMaker(config, dataset, "/tmp/test.ttl")
