@@ -199,16 +199,17 @@ class RuleMaker(object):
                            'sheet': sheet_name,
                            'dataset' : dataset_name}
             pairs = mappings_list.get_mappings_for(literal, context_map)
+            cell_uri = self.conf.getURI('cedar', cell_name)
             if pairs != None:
                 count = count + 1
                 # Mint URIs
-                annotation_URI = URIRef(cell_name + "-mapping")
+                annotation_URI = URIRef(cell_uri + "-mapping")
                 annotation_body_URI = annotation_URI + "-body"
                 # Add the triples
                 graph.add((annotation_URI, RDF.type, self.conf.getURI('oa', 'Annotation')))
                 graph.add((annotation_URI, RDFS.label, Literal('Mapping')))
                 graph.add((annotation_URI, self.conf.getURI('oa', 'hasBody'), annotation_body_URI))
-                graph.add((annotation_URI, self.conf.getURI('oa', 'hasTarget'), URIRef(cell)))
+                graph.add((annotation_URI, self.conf.getURI('oa', 'hasTarget'), cell_uri))
                 graph.add((annotation_URI, self.conf.getURI('oa', 'serializedAt'), self._now()))
                 graph.add((annotation_URI, self.conf.getURI('oa', 'serializedBy'), INTEGRATOR_URI))
                 graph.add((annotation_URI, self.conf.getURI('prov', 'wasGeneratedBy'), activity_URI))
