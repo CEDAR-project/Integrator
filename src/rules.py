@@ -114,7 +114,7 @@ class MappingsList(object):
                 return self._mappings[literal]['context'][context]
         
         # Nothing matches
-        return None
+        return self._mappings[literal]['default']
     
 class RuleMaker(object):
     def __init__(self, configuration, dataset, output_file_name):
