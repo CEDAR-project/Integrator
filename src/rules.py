@@ -76,12 +76,13 @@ class MappingsList(object):
             # Save the mapping
             if len(values) > 0:
                 self._mappings.setdefault(literal, {})
-                # Store the default mappings
-                self._mappings[literal]['default'] = values
                 # Store the specific context if applicable
                 if context != '':
                     self._mappings[literal].setdefault('context', {})
                     self._mappings[literal]['context'][context] = values
+                else:
+                    # Store the default mappings
+                    self._mappings[literal]['default'] = values 
                     
         
     def get_src_URI(self):
@@ -113,7 +114,12 @@ class MappingsList(object):
             if context in self._mappings[literal]['context']:
                 return self._mappings[literal]['context'][context]
         
-        # Nothing matches
+        # Current context match no exception for this literal
+        # If no default mapping is defined, don't map the literal
+        if 'default' not in self._mappings[literal]:
+            return None
+        
+        # Exceptions don't match but we have a default mapping
         return self._mappings[literal]['default']
     
 class RuleMaker(object):
