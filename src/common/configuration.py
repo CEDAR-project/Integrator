@@ -13,18 +13,30 @@ class Configuration(object):
             self.namespaces = {}
             for (name, value) in self.config.items("namespaces"):
                 self.namespaces[name] = Namespace(value)
-                
-            # Set the logger level and format
-            verbose = self.config.get('debug', 'verbose')
-            self.logLevel = logging.DEBUG if verbose == "1" else logging.INFO
-            logFormat = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
-            logging.basicConfig(format = logFormat)
             
-            self.fh = logging.FileHandler('integrator.log', mode='w')
-            self.fh.setFormatter(logging.Formatter(logFormat))
+            # Set the debug level    
+            self.verbose = self.config.get('debug', 'verbose')
+        
+            # Configure logger
+            self._setup_logger()
+            
         except :
             logging.error("Could not find configuration file")
     
+    
+    def setVerbose(self, value):
+        self.verbose = '1' if value else '0'
+        self._setup_logger() 
+        
+    def _setup_logger(self):
+        # Set the logger level and format
+        self.logLevel = logging.DEBUG if self.verbose == "1" else logging.INFO
+        logFormat = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+        logging.basicConfig(format = logFormat)
+        
+        self.fh = logging.FileHandler('integrator.log', mode='w')
+        self.fh.setFormatter(logging.Formatter(logFormat))
+        
     def getLogger(self, name):
         logger = logging.getLogger(name)
         logger.setLevel(self.logLevel)
