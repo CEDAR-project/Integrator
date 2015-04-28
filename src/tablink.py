@@ -22,6 +22,7 @@ from common.configuration import Configuration
 from common import util
 
 import sys
+import exceptions
 reload(sys)
 import traceback
 sys.setdefaultencoding("utf8")  # @UndefinedVariable
@@ -278,8 +279,11 @@ class TabLink(object):
         for rowDimension in rowDimensions:
                 for (p, vs) in rowDimensions[rowDimension].iteritems():
                     for v in vs:
-                        self.graph.add((v, self.conf.getURI('tablink', 'parentCell'), p))
-        
+                        try:
+                            self.graph.add((v, self.conf.getURI('tablink', 'parentCell'), p))
+                        except exceptions.AssertionError:
+                            self.log.debug('Ignore {}'.format(p))
+                            
         # Add additional information about the hierarchy of column headers
         # for value in columnDimensions.values():
         #    for index in range(1, len(value)):
@@ -304,6 +308,8 @@ class TabLink(object):
         if cell['isEmpty']:
             return
         
+        self.log.debug("({},{}) Handle data cell".format(cell['i'], cell['j']))
+                
         # Add the cell to the graph
         self._createCell(cell, self.conf.getURI('tablink', 'DataCell'))
             
@@ -329,6 +335,8 @@ class TabLink(object):
         if cell['isEmpty']:
             return
 
+        self.log.debug("({},{}) Handle row header : {}".format(cell['i'], cell['j'], cell['value']))
+        
         # Add the cell to the graph
         self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
         
@@ -336,8 +344,11 @@ class TabLink(object):
         i = cell['i']
         # Get the property for the column
         j = cell['j']
-        prop = rowProperties[j]
-
+        try:
+            prop = rowProperties[j]
+        except exceptions.KeyError:
+            prop = 'NonExistingRowHeader%d' % j 
+        
         rowDimensions.setdefault(i, {})
         rowDimensions[i].setdefault(prop, [])
         rowDimensions[i][prop].append(cell['URI'])
@@ -365,6 +376,8 @@ class TabLink(object):
         # Get the property for the column
         j = cell['j']
         prop = rowProperties[j]
+        
+        self.log.debug("({},{}) Handle HRow header".format(cell['i'], cell['j']))
         
         if (cell['isEmpty'] or cell['value'].lower() == 'id.' or cell['value'].lower() == 'id ') :
             # If the cell is empty, and a HierarchicalRowHeader, add the value of the row header above it.
@@ -399,9 +412,10 @@ class TabLink(object):
         """
         Create relevant triples for the cell marked as Header
         """
-        # Add the cell to the graph
-        self.log.debug("({},{}) Add column dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
+        # Add the col header to the graph
+        self.log.debug("({},{}) Add column header \"{}\"".format(cell['i'], cell['j'], cell['value']))
         self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'))
+        
         # If there is already a parent dimension, connect to it
         if cell['j'] in columnDimensions:
             self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))    
@@ -497,9 +511,10 @@ class TabLink(object):
         
 if __name__ == '__main__':
     config = Configuration('config.ini')
+    config.setVerbose(True)
     
     # Test
-    inputFile = "data-test/simple.ods"
+    inputFile = "data-test/gambia-wages-prices-welfare-ratio.ods"
     #inputFile = "data-test/VT_1899_07_H1.ods"
     dataFile = "/tmp/data.ttl"
 
