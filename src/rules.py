@@ -27,7 +27,9 @@ INTEGRATOR_URI = URIRef("https://github.com/CEDAR-project/Integrator")
 
 class MappingsList(object):
     
-    def __init__(self, data):
+    def __init__(self, data, configuration):
+        self.log = configuration.getLogger("RuleMaker")
+        
         self._mappings = {}
         
         self.excelFileName = data['file']
@@ -73,16 +75,18 @@ class MappingsList(object):
                     pair = (predicate, encoded_value)
                     values.append(pair)
                     
+            if len(values) == 0:
+                values = None
+                
             # Save the mapping
-            if len(values) > 0:
-                self._mappings.setdefault(literal, {})
-                # Store the specific context if applicable
-                if context != '':
-                    self._mappings[literal].setdefault('context', {})
-                    self._mappings[literal]['context'][context] = values
-                else:
-                    # Store the default mappings
-                    self._mappings[literal]['default'] = values 
+            self._mappings.setdefault(literal, {})
+            if context != '':
+                # Store the specific context
+                self._mappings[literal].setdefault('context', {})
+                self._mappings[literal]['context'][context] = values
+            else:
+                # Store the default mappings
+                self._mappings[literal]['default'] = values 
                     
         
     def get_src_URI(self):
@@ -111,7 +115,9 @@ class MappingsList(object):
         # Check for all the possible context, starting with the most specific
         for key in ['cell','sheet','dataset']:
             context = '%s=%s' % (key, context_map[key])
+            self.log.debug(context)
             if context in self._mappings[literal]['context']:
+                self.log.debug('Found')
                 return self._mappings[literal]['context'][context]
         
         # Current context match no exception for this literal
@@ -200,7 +206,7 @@ class RuleMaker(object):
         # Process all the headers one by one
         mappings_list = self.mappings[dimension_name]
         for header in self.headers:
-            [cell, literal, _, cell_name, sheet_name, dataset_name] = header
+            [_, literal, _, cell_name, sheet_name, dataset_name] = header
             context_map = {'cell' : cell_name,
                            'sheet': sheet_name,
                            'dataset' : dataset_name}
@@ -302,7 +308,7 @@ class RuleMaker(object):
                 self.log.debug("=> %s" % section)
                 data = dict(metadata.items(section))
                 data['path'] = mappingFilesPath
-                mappingsList = MappingsList(data)
+                mappingsList = MappingsList(data, self.conf)
                 self.mappings[section] = mappingsList
             except:
                 self.log.error("[{}] Something bad happened with {} : {}".format(self.dataset, section, sys.exc_info()[0]))
@@ -310,6 +316,7 @@ class RuleMaker(object):
 if __name__ == '__main__':
     # Configuration
     config = Configuration('config.ini')
+    config.setVerbose(True)
     
     #dataset = config.getURI('cedar',"BRT_1889_02_T1-S0")
     #dataset = config.getURI('cedar',"VT_1869_01_H1-S0")
@@ -317,6 +324,6 @@ if __name__ == '__main__':
     
     # Test
     rulesMaker = RuleMaker(config, dataset, "/tmp/test.ttl")
-    rulesMaker.loadMappings("DataDump/mapping") #, ['Sex','MaritalStatus']
+    rulesMaker.loadMappings("DataDump/mapping", ['Total']) #, ['Sex','MaritalStatus']
     rulesMaker.loadHeaders(True)
     rulesMaker.process() # ['Sex','MaritalStatus']
