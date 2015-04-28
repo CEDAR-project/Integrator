@@ -92,10 +92,8 @@ class TabLink(object):
         self.basename = os.path.basename(excelFileName)
         self.basename = re.search('(.*)\.ods', self.basename).group(1)
         
-        self.log.debug('Loading Excel file {0}'.format(excelFileName))
+        self.log.info('[{}] Loading {}'.format(self.basename, excelFileName))
         self.book = load(unicode(excelFileName))
-        
-        self.log.debug('Loading custom styles')
         self.stylesnames = {}
         for style in self.book.getElementsByType(Style):
             parentname = style.getAttrNS(STYLENS, 'parent-style-name')
@@ -107,7 +105,7 @@ class TabLink(object):
         """
         Start processing all the sheets in workbook
         """
-        self.log.debug('Starting TabLink for all sheets in workbook')
+        self.log.debug('[{}] Starting TabLink for all sheets in workbook'.format(self.basename))
         # keep the starting time (ex "2012-04-15T13:00:00-04:00")
         startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                             datatype=self.conf.getURI('xsd', 'dateTime'))
@@ -115,7 +113,7 @@ class TabLink(object):
         sheets = self.book.getElementsByType(Table)
         
         # Process all the sheets
-        self.log.info(self.basename + ':Found %d sheets to process' % len(sheets))
+        self.log.info('[{}] Found {} sheets to process'.format(self.basename,len(sheets)))
         sheetURIs = []
         for n in range(len(sheets)) :
             self.log.debug('Processing sheet {0}'.format(n))
@@ -184,7 +182,7 @@ class TabLink(object):
         self.graph.add((activityURI, self.conf.getURI('prov', 'used'), srcURI))
         
         # Save the graph
-        self.log.info("Saving {} data triples.".format(len(self.graph)))
+        self.log.info('[{}] Saving {} data triples'.format(self.basename,len(self.graph)))
         try :
             out = bz2.BZ2File(self.dataFileName + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.dataFileName, "w")
             self.graph.serialize(destination=out, format='n3')
@@ -511,11 +509,12 @@ class TabLink(object):
         
 if __name__ == '__main__':
     config = Configuration('config.ini')
-    config.setVerbose(True)
+    config.setVerbose(False)
     
     # Test
-    inputFile = "data-test/gambia-wages-prices-welfare-ratio.ods"
+    #inputFile = "data-test/gambia-wages-prices-welfare-ratio.ods"
     #inputFile = "data-test/VT_1899_07_H1.ods"
+    inputFile = 'DataDump/source-data/VT_1879_01_H1.ods'
     dataFile = "/tmp/data.ttl"
 
     tLinker = TabLink(config, inputFile, dataFile, processAnnotations=True)
