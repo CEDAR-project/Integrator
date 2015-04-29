@@ -74,7 +74,7 @@ def generate_raw_rdf_thread(parameters):
     name = parameters['name']
     xls_file = parameters['xls_file']
     dataFile = parameters['dataFile']
-    log.info("Calling tablinker for %s" % name)
+    log.info("[{}] Calling tablinker".format(name))
     tLinker = TabLink(config, xls_file, dataFile, processAnnotations = True)
     tLinker.doLink()
     

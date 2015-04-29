@@ -134,6 +134,7 @@ if __name__ == '__main__':
     
     # Set target files for testing
     name = 'VT_1859_01_H1'
+    name = 'VT_1899_07_H1'
     input_file_name = 'DataDump/source-data/{}.ods'.format(name)
     output_file_name = '/tmp/{}.ods'.format(name)
     
