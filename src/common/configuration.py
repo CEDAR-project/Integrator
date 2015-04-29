@@ -75,3 +75,8 @@ class Configuration(object):
             prefixes = "%s prefix %s: <%s>\n" % (prefixes, name, value)
         return prefixes
         
+    def curify(self, string):
+        for (name, value) in self.namespaces.iteritems():
+            if string.startswith(value):
+                return string.replace(value, name + ':')
+        return string
