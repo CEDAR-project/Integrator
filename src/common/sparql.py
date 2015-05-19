@@ -24,6 +24,7 @@ class SPARQLWrap(object):
                 query = query.replace(k,v)
         query = self.prefixes + query
         
+        print query
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         #sparql.setCredentials('rdfread', 'red_fred')
