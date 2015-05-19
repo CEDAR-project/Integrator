@@ -21,7 +21,7 @@ sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
 pp = pprint.PrettyPrinter(indent=2)
 
-HEADERS_QUERY = 'Queries/get-headers.rq'
+HEADERS_QUERY = 'queries/get-headers.sparql'
 HEADERS_CACHE_DIR = '_cache/'
 INTEGRATOR_URI = URIRef("https://github.com/CEDAR-project/Integrator")
 
@@ -260,7 +260,8 @@ class RuleMaker(object):
             
             # Load and execute the SPARQL query, save to the cache too
             sparql_query = open(HEADERS_QUERY, 'r').read()
-            sparql_params = {'__DATA_SET__' : self.dataset.n3() }
+            sparql_params = {'__DATA_SET__' : self.dataset.n3(),
+                             '__RAW_DATA__' : self.conf.get_graph_name('raw-data')}
             cache_file = open(cache_file_name, 'wb')
             csv_writer = csv.writer(cache_file, delimiter=';', quotechar='"')
             results = self.sparql.run_select(sparql_query, sparql_params)

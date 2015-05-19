@@ -133,8 +133,9 @@ if __name__ == '__main__':
     config.setVerbose(True)
     
     # Set target files for testing
-    name = 'VT_1859_01_H1'
-    name = 'VT_1899_07_H1'
+    #name = 'VT_1859_01_H1'
+    #name = 'VT_1899_07_H1'
+    name = 'VT_1920_01_T'
     input_file_name = 'DataDump/source-data/{}.ods'.format(name)
     output_file_name = '/tmp/{}.ods'.format(name)
     

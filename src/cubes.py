@@ -221,7 +221,8 @@ if __name__ == '__main__':
     # BRT_1889_05_T4-S0
     # BRT_1899_03_T-S0 <- Too big ?
     # BRT_1909_02A1_T1-S1 is broken
-    sheet_uri = config.getURI('cedar', 'BRT_1889_05_T4-S0')
+    #sheet_uri = config.getURI('cedar', 'BRT_1889_05_T4-S0')
+    sheet_uri = config.getURI('cedar', 'VT_1859_01_H1-S6')
 
     # Test
     cube = CubeMaker(config)

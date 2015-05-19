@@ -26,7 +26,7 @@ class SPARQLWrap(object):
         
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
-        sparql.setCredentials('rdfread', 'red_fred')
+        #sparql.setCredentials('rdfread', 'red_fred')
         results = sparql.query().convert()
         
         return results["results"]["bindings"]
@@ -39,7 +39,7 @@ class SPARQLWrap(object):
         offset = 0
         sparql = SPARQLWrapper(self.conf.get_SPARQL())
         sparql.setReturnFormat(JSON)
-        sparql.setCredentials('rdfread', 'red_fred')
+        #sparql.setCredentials('rdfread', 'red_fred')
         if params != None:
             for (k,v) in params.iteritems():
                 query = query.replace(k,v)
@@ -68,7 +68,7 @@ class SPARQLWrap(object):
                 query = query.replace(k,v)
         query = self.prefixes + query
         sparql.setQuery(query)
-        sparql.setCredentials('rdfread', 'red_fred')
+        #sparql.setCredentials('rdfread', 'red_fred')
         results = sparql.query().convert()
         return results
     
