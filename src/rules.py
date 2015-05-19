@@ -265,6 +265,7 @@ class RuleMaker(object):
             cache_file = open(cache_file_name, 'wb')
             csv_writer = csv.writer(cache_file, delimiter=';', quotechar='"')
             results = self.sparql.run_select(sparql_query, sparql_params)
+            self.log.debug("Headers query executed successfully.")
             for result in results:
                 # Parse the result
                 cell = result['cell']['value']
