@@ -1,3 +1,5 @@
+PREFIX tablink: <http://bit.ly/cedar-tablink#>
+
 SELECT DISTINCT ?cell ?literal ?header_type ?dataset_name
 FROM __RAW_DATA__ 
 WHERE {
