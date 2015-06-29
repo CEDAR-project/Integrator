@@ -221,5 +221,5 @@ if __name__ == '__main__':
     push_to_virtuoso(config.get_graph_name('release'), RELEASE_PATH + '/*')
 
     # Step 7 : update the cube DSD and push it
-    # update_dsd()
+    update_dsd()
     # add_to_virtuoso(config.get_graph_name('release'), RELEASE_PATH + '/extra.ttl.bz2')
