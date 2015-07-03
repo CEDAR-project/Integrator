@@ -1,16 +1,21 @@
 import bz2
 import os
-import sys
 import requests
-import subprocess
 import multiprocessing
+from subprocess import check_call
 
 BUFFER = "/tmp/buffer.txt"
 MAX_NT = 1000  # hard max apparently for Virtuoso
 
+# Define the logger
+import logging
+log = logging.getLogger(__name__)
+
 # Working POST
 # curl --digest --user "dba:naps48*mimed" --verbose --url "http://lod.cedar-project.nl:8080/sparql-graph-crud?graph-uri=urn:graph:update:test:put" -X POST -T /tmp/data.ttl 
 # http://virtuoso.openlinksw.com/dataspace/doc/dav/wiki/Main/VirtTipsAndTricksGuideDeleteLargeGraphs
+
+logging.getLogger("requests").setLevel(logging.WARNING)
 
 def _push_chunk_thread(parameters):
     graph_uri = parameters['graph_uri']
@@ -20,11 +25,13 @@ def _push_chunk_thread(parameters):
     secret = parameters['secret']
     query = """
     DEFINE sql:log-enable 3 
-    INSERT INTO <%s> {
+    INSERT INTO %s {
     """ % graph_uri
     query = query + chunk + "}"
-    requests.post(sparql, auth=(user, secret), data={'query' : query})
-        
+    r = requests.post(sparql, auth=(user, secret), data={'query' : query})
+    if r.status_code != 200:
+        log.error("{} : {}".format(r.status_code, r.text.replace('\n', '')))
+    
 class Pusher(object):
     def __init__(self, sparql, user, secret):
         self.user = user
@@ -35,12 +42,13 @@ class Pusher(object):
         # Clear the previous graph
         query = """
         DEFINE sql:log-enable 3 
-        CLEAR GRAPH <%s>
+        CLEAR GRAPH %s
         """ % uri
         r = requests.post(self.sparql, 
                           auth=(self.user, self.secret),
                           data={'query' : query})
-        print r.status_code
+        if r.status_code != 200:
+            log.error("{} : {}".format(r.status_code, r.text.replace('\n', '')))
     
     def upload_file(self, graph_uri, input_file):
         # First remove the last BUFFER        
@@ -48,13 +56,17 @@ class Pusher(object):
             os.unlink(BUFFER)
         
         # Serialise the triples as ntriples in BUFFER
-        if input_file.endswith('.bz2'):
-            f = open(BUFFER + '-unzip', 'wb')
-            f.write(bz2.BZ2File(input_file).read())
-            f.close()
-            subprocess.call("rapper -i guess -o ntriples " + BUFFER + '-unzip > ' + BUFFER, stderr=sys.stdout, shell=True)
-        else:
-            subprocess.call("rapper -i guess -o ntriples " + input_file + ' > ' + BUFFER, stderr=sys.stdout, shell=True) 
+        DEVNULL = open(os.devnull, 'wb')
+        try:
+            if input_file.endswith('.bz2'):
+                f = open(BUFFER + '-unzip', 'wb')
+                f.write(bz2.BZ2File(input_file).read())
+                f.close()
+                check_call("rapper -i turtle -o ntriples " + BUFFER + '-unzip > ' + BUFFER, stderr=DEVNULL, shell=True)
+            else:
+                check_call("rapper -i turtle -o ntriples " + input_file + ' > ' + BUFFER, stderr=DEVNULL, shell=True) 
+        finally:
+            DEVNULL.close()              
         
         # Load all the data into chunks
         tasks = []

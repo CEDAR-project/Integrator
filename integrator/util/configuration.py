@@ -19,9 +19,6 @@ class Configuration(object):
     def verbose(self):
         return self.config.get('debug', 'verbose') == '1';
     
-    def isOverwrite(self):
-        return self.config.get('debug', 'overwrite') == '1';
-    
     def get_graph_name(self, name):
         return URIRef(self.config.get('graphs', name)).n3()
 

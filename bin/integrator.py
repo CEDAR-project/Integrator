@@ -25,7 +25,7 @@ if __name__ == '__main__':
     integrator = Integrator(config)
         
     # Step 1 : convert the spreadsheet files
-    integrator.generate_raw_data()
+    #integrator.generate_raw_data()
 
     # Step 2 : generate harmonisation rules
     integrator.generate_harmonization_rules()

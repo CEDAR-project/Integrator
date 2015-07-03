@@ -26,7 +26,6 @@ class SPARQLWrap(object):
             for (k,v) in params.iteritems():
                 query = query.replace(k,v)
         sparql.setQuery(query)
-        log.info(query)
         
         results = sparql.query().convert()
         

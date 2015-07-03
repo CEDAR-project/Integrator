@@ -51,6 +51,9 @@ class RuleMaker(object):
         self.mappings = {}
         self.headers = []
         
+        # Compress by default
+        self.compress_output = True
+        
         # The location of the SPARQL end_point
         self.end_point = end_point
 
@@ -126,7 +129,7 @@ class RuleMaker(object):
             # Save the graph
             log.info("[{}] Saving {} data triples.".format(self.dataset, len(self.graph)))
             try :
-                out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.output_file_name, "w")
+                out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.compress_output else open(self.output_file_name, "w")
                 self.graph.serialize(destination=out, format='n3')
                 out.close()
             except :
@@ -180,14 +183,10 @@ class RuleMaker(object):
         This method fetches all the header used in the raw data and
         saves them as a cache in a CSV file
         '''
-        log.info("[{}] Loading headers".format(self.dataset))
-        
         # Load and execute the SPARQL query, save to the cache too
         sparql = SPARQLWrap(self.end_point)
-        sparql_params = {'__DATA_SET__' : self.data_ns[self.dataset].n3(),
+        sparql_params = {'__DATA_SET__' : URIRef(self.dataset).n3(),
                          '__RAW_DATA__' : graph_name}
-        log.info(self.end_point)
-        log.info(sparql_params)
         results = sparql.run_select(HEADERS_QUERY, sparql_params)
         for result in results:
             # Parse the result
@@ -201,7 +200,7 @@ class RuleMaker(object):
             # Save to the headers list
             self.headers.append(row)
 
-        log.info("[%s] => %d results" % (self.dataset, len(self.headers)))
+        log.info("[{}] Loaded {} headers".format(self.dataset, len(self.headers)))
         
     def loadMappings(self, mappingFilesPath, sections=None):
         '''

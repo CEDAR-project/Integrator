@@ -17,10 +17,10 @@ log = logging.getLogger(__name__)
 
 SHEETS_QUERY = """
 PREFIX tablinker: <http://bit.ly/cedar-tablink#>
-SELECT DISTINCT ?sheet FROM __RAW_DATA__ WHERE {
-    ?sheet_uri a tablinker:Sheet.
-    ?sheet_uri rdfs:label ?sheet.
-} ORDER BY ?sheet
+SELECT DISTINCT ?name FROM __RAW_DATA__ WHERE {
+    ?sheet a tablinker:Sheet.
+    ?sheet rdfs:label ?name.
+} ORDER BY ?name
 """
 
 class Integrator(object):
@@ -53,7 +53,6 @@ class Integrator(object):
                     'target'     :self._conf.get_namespace('data'),
                     'compress'   :self._conf.isCompress()}
             tasks.append(task)
-        
     
         # Call tablinker in parallel
         pool_size = multiprocessing.cpu_count()
@@ -64,7 +63,7 @@ class Integrator(object):
         
         # Push everything to the triple store
         self._push_to_graph(self._conf.get_graph_name('raw-data'),
-                            self._conf.get_path('raw-data'))
+                            self._conf.get_path('raw-data') + '/*')
         
     def generate_harmonization_rules(self):
         '''
@@ -78,15 +77,12 @@ class Integrator(object):
         for dataset in self._get_sheets_list():
             name = dataset.split('/')[-1]
             output = self._conf.get_path('rules') + '/' + name + '.ttl'
-            task = {'dataset' : dataset,
-                    'output'  : output,
-                    'endpoint': self._conf.get_SPARQL(),
-                    'target'  :self._conf.get_namespace('data'),
-                    'raw-data': self._conf.get_graph_name('raw-data'),
-                    'mappings': self._conf.get_path('mappings'),
-                    'compress': self._conf.isCompress()}
-            tasks.append(task)
-        
+            task = {'dataset'  :dataset, 
+                    'output'   :output,
+                    'mappings' :self._conf.get_path('mappings'),
+                    'compress' :self._conf.isCompress()}
+            tasks.append(task)        
+
         # Call rules maker in parallel, avoid hammering the store too much
         pool = multiprocessing.Pool(processes=4)
         pool.map(generate_harmonization_rules_thread, tasks)
@@ -95,25 +91,42 @@ class Integrator(object):
         
         # Push all the data to the triple store
         self._push_to_graph(self._conf.get_graph_name('rules'),
-                            self._conf.get_path('rules'))
+                            self._conf.get_path('rules') + '/*')
 
     def generate_release(self):
         '''
         Get a list of data set to be processed and try to harmonised them into
         one big data cube
         '''
+        # Erase previous DSD
+        dsd_file = self._conf.get_path('release') + '/dsd.ttl'
+        if self._conf.isCompress():
+            dsd_file = dsd_file + '.bz2'
+        if os.path.exists(dsd_file):
+            os.remove(dsd_file)
+            
         # Prepare a task list
         tasks = []
-        for sheet_name in self._get_sheets_list():
-            output_file = self._conf.get_path('release') + sheet_name + '.ttl'
-            task = {'sheet_name'     : sheet_name,
-                    'output_file'    : output_file,
-                    'endpoint'       : self._conf.get_SPARQL(),
-                    'compress'       : self._conf.isCompress(),
-                    'target'         : self._conf.get_namespace('data'),
-                    'raw_data_graph' : self._conf.get_graph_name('raw-data'),
-                    'rules_graph'    : self._conf.get_graph_name('rules')}
-            tasks.append(task)
+        for dataset in self._get_sheets_list():
+            name = dataset.split('/')[-1]
+            data_file = self._conf.get_path('release') + name + '.ttl'
+            data_file_check = data_file
+            if self._conf.isCompress():
+                data_file_check = data_file_check + '.bz2'
+            if (not os.path.exists(data_file_check)) or self._conf.isOverwrite():
+                task = {'dataset' : dataset,
+                        'data_file' : data_file}
+                tasks.append(task)
+    
+        def generate_release_thread(parameters):
+            dataset = parameters['dataset']
+            data_file = parameters['data_file']
+            log.info("[{}] Calling CubeMaker".format(dataset.n3()))
+            try:
+                cubeMaker = CubeMaker()
+                cubeMaker.process(dataset, data_file)
+            except:
+                log.error("[{}] Error in CubeMaker".format(dataset.n3()))
 
         # Call cube in parallel, avoid hammering the store too much
         cpu_count = multiprocessing.cpu_count()
@@ -124,22 +137,19 @@ class Integrator(object):
             
         # Push all the data to the triple store
         self._push_to_graph(self._conf.get_graph_name('release'),
-                            self._conf.get_path('release'))
+                            self._conf.get_path('release') + '/*')
     
         # Update the DSD
-        dsd_file_name = self._conf.get_path('release') + 'dsd.ttl'
+        dsd_file_name = self._conf.get_path('release') + '/dsd.ttl'
         log.info("Asking CubeMaker to generate the DSD")
         cubeMaker = CubeMaker()
-        cubeMaker.generate_dsd(self._conf.get_SPARQL(), self._conf.get_graph_name('release'), dsd_file_name)
+        cubeMaker.generate_dsd(dsd_file_name)
         
         # Load the DSD
-        pusher = Pusher(self._conf.get_SPARUL(),
-                        self._conf.get_user(),
-                        self._conf.get_secret())
-        log.info("[{}] Adding the content of the DSD".format(self._conf.get_graph_name('release')))
-        if self._conf.isCompress():
-            dsd_file_name = dsd_file_name + ".bz2"
+        pusher = Pusher(self._conf.get_SPARUL())
+        log.info("Adding the DSD to the triple store")
         pusher.upload_file(self._conf.get_graph_name('release'), dsd_file_name)
+        self._add_to_graph()
     
     def generate_enhanced_source_files(self):
         pass
@@ -151,7 +161,7 @@ class Integrator(object):
         sparql = SPARQLWrap(self._conf.get_SPARQL())
         params = {'__RAW_DATA__': self._conf.get_graph_name('raw-data')}
         results = sparql.run_select(SHEETS_QUERY, params)
-        datasets = [sparql.format(r['sheet']) for r in results]
+        datasets = [sparql.format(r['name']) for r in results]
         return datasets
     
     def _push_to_graph(self, named_graph, directory):
@@ -164,10 +174,8 @@ class Integrator(object):
         log.info("[{}] Cleaning the content of the graph ".format(named_graph))
         pusher.clean_graph(named_graph)
         log.info("[{}] Loading files in {}".format(named_graph, directory))
-        for input_file in sorted(glob.glob(directory + '/*')):
-            log.info("[{}] Loading {}".format(named_graph, input_file))
+        for input_file in sorted(glob.glob(directory)):
             pusher.upload_file(named_graph, input_file)
-        log.info("[{}] Done loading data".format(named_graph))
 
 def generate_raw_data_thread(parameters):
     '''
@@ -176,40 +184,26 @@ def generate_raw_data_thread(parameters):
     name = parameters['name']
     input_file = parameters['input_file']
     output_file = parameters['output_file']
+    target = parameters['target']
+    compress = parameters['compress']
     log.info("[{}] Calling TabLinker".format(name))
     tLinker = TabLinker(input_file, output_file, processAnnotations=True)
-    tLinker.set_target_namespace(parameters['target'])
-    tLinker.set_compress(parameters['compress'])
+    tLinker.set_target_namespace(target)
+    tLinker.set_compress(compress)
     tLinker.doLink()
-
+    
 def generate_harmonization_rules_thread(parameters):
     '''
     Worker thread for generate_harmonization_rules
     '''
     dataset = parameters['dataset']
-    output = parameters['output']
-    log.info("[{}] Calling RulesMaker".format(dataset))
+    log.info("[{}] Calling RulesMaker".format(dataset.n3()))
     try:
-        rulesMaker = RuleMaker(parameters['endpoint'], dataset, output)
-        rulesMaker.set_target_namespace(parameters['target'])
-        rulesMaker.set_compress(parameters['compress'])
+        rulesMaker = RuleMaker(dataset, parameters['output'])
         rulesMaker.loadMappings(parameters['mappings']) 
-        rulesMaker.loadHeaders(parameters['raw-data'])
+        rulesMaker.loadHeaders()
+        rulesMaker.set_compress(parameters['compress'])
         rulesMaker.process()
-    except Exception as e:
-        log.error("[{}] Error in RulesMaker: {}".format(dataset.n3(), e))
+    except:
+        log.error("[{}] Error in RulesMaker".format(dataset.n3()))
 
-def generate_release_thread(parameters):
-    '''
-    Worker thread for generate_release
-    '''
-    sheet_name = parameters['sheet_name']
-    output_file = parameters['output_file']
-    log.info("[{}] Calling CubeMaker".format(sheet_name))
-    try:
-        cubeMaker = CubeMaker()
-        cubeMaker.set_target_namespace(parameters['target'])
-        cubeMaker.set_compress(parameters['compress'])
-        cubeMaker.process(parameters['endpoint'], parameters['raw_data_graph'], parameters['rules_graph'], sheet_name, output_file)
-    except Exception as e:
-        log.error("[{}] Error in CubeMaker: {}".format(sheet_name, e))

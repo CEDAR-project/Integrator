@@ -99,7 +99,8 @@ class TabLinker(object):
                 if marked_count != 0:
                     # Describe the sheet
                     self.graph.add((sheetURI, RDF.type, TABLINKER.Sheet))
-                    self.graph.add((sheetURI, RDFS.label, Literal(sheets[n].getAttrNS(TABLENS, 'name'))))
+                    self.graph.add((sheetURI, RDFS.label, Literal(sheetURI.replace(self.data_ns, ''))))
+                    self.graph.add((sheetURI, TABLINKER.value, Literal(sheets[n].getAttrNS(TABLENS, 'name'))))
                     # Add it to the dataset
                     sheetURIs.append(sheetURI)
             except Exception as detail:
