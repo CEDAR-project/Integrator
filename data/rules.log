@@ -1,0 +1,65 @@
+2015-07-02 15:05:39,325 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:05:39,325 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:08:47,094 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:08:47,094 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:10:27,174 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:10:27,174 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:14:59,075 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:14:59,075 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:15:11,287 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:15:11,288 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:16:08,174 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:16:08,175 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:16:08,175 modules.rulemaker.rules INFO     <util.sparql.SPARQLWrap object at 0x7f3bb7427d90>
+2015-07-02 15:16:08,175 modules.rulemaker.rules INFO     {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:16:19,650 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:16:19,651 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:16:19,651 modules.rulemaker.rules INFO     http://localhost:3030/Integrator/sparql
+2015-07-02 15:16:19,651 modules.rulemaker.rules INFO     {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:17:13,591 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:17:13,592 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:17:13,592 modules.rulemaker.rules INFO     http://localhost:3030/Integrator/sparql
+2015-07-02 15:17:13,592 modules.rulemaker.rules INFO     {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:17:14,030 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] => 0 results
+2015-07-02 15:17:14,046 modules.rulemaker.rules INFO     [VT_1899_07_H1-S0] Saving 5 data triples.
+2015-07-02 15:17:14,046 modules.rulemaker.rules ERROR    [VT_1899_07_H1-S0] Whoops! Something went wrong in serialising to output file
+2015-07-02 15:18:48,562 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:18:48,562 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:18:48,562 modules.rules.rulesmaker INFO     http://localhost:3030/Integrator/sparql
+2015-07-02 15:18:48,562 modules.rules.rulesmaker INFO     {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:18:48,582 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] => 0 results
+2015-07-02 15:18:48,591 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Saving 5 data triples.
+2015-07-02 15:18:48,591 modules.rules.rulesmaker ERROR    [VT_1899_07_H1-S0] Whoops! Something went wrong in serialising to output file
+2015-07-02 15:19:14,695 modules.rules.rulesmaker INFO   [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:19:14,695 modules.rules.rulesmaker INFO   [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:19:14,695 modules.rules.rulesmaker INFO   http://localhost:3030/Integrator/sparql
+2015-07-02 15:19:14,695 modules.rules.rulesmaker INFO   {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:19:14,715 modules.rules.rulesmaker INFO   [VT_1899_07_H1-S0] => 0 results
+2015-07-02 15:19:14,724 modules.rules.rulesmaker INFO   [VT_1899_07_H1-S0] Saving 5 data triples.
+2015-07-02 15:19:14,724 modules.rules.rulesmaker ERROR  [VT_1899_07_H1-S0] Whoops! Something went wrong in serialising to output file
+2015-07-02 15:19:19,899 modules.rules.rulesmaker INFO  [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:19:19,900 modules.rules.rulesmaker INFO  [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:19:19,900 modules.rules.rulesmaker INFO  http://localhost:3030/Integrator/sparql
+2015-07-02 15:19:19,900 modules.rules.rulesmaker INFO  {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:19:19,917 modules.rules.rulesmaker INFO  [VT_1899_07_H1-S0] => 0 results
+2015-07-02 15:19:19,927 modules.rules.rulesmaker INFO  [VT_1899_07_H1-S0] Saving 5 data triples.
+2015-07-02 15:19:19,927 modules.rules.rulesmaker ERROR [VT_1899_07_H1-S0] Whoops! Something went wrong in serialising to output file
+2015-07-02 15:19:32,453 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:19:32,453 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:19:32,454 modules.rules.rulesmaker INFO     http://localhost:3030/Integrator/sparql
+2015-07-02 15:19:32,454 modules.rules.rulesmaker INFO     {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:19:32,473 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] => 0 results
+2015-07-02 15:19:32,484 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Saving 5 data triples.
+2015-07-02 15:19:32,484 modules.rules.rulesmaker ERROR    [VT_1899_07_H1-S0] Whoops! Something went wrong in serialising to output file
+2015-07-02 15:20:21,900 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Loading mappings
+2015-07-02 15:20:21,901 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Loading headers
+2015-07-02 15:20:21,901 modules.rules.rulesmaker INFO     http://localhost:3030/Integrator/sparql
+2015-07-02 15:20:21,901 modules.rules.rulesmaker INFO     {'__DATA_SET__': u'<http://example.org/VT_1899_07_H1-S0>', '__RAW_DATA__': u'<urn:graph:cedar:raw-data>'}
+2015-07-02 15:20:21,924 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] => 0 results
+2015-07-02 15:20:21,934 modules.rules.rulesmaker INFO     [VT_1899_07_H1-S0] Saving 5 data triples.
+2015-07-02 15:20:21,934 modules.rules.rulesmaker ERROR    [VT_1899_07_H1-S0] Whoops! Something went wrong in serialising to output file
+2015-07-02 15:25:01,965 modules.tablinker.tablinker INFO     [VT_1899_07_H1] Loading "CEDAR/source-data/"/VT_1899_07_H1.ods
+2015-07-02 15:25:28,281 modules.tablinker.tablinker INFO     [VT_1899_07_H1] Loading CEDAR/source-data//VT_1899_07_H1.ods
+2015-07-02 15:26:26,335 modules.tablinker.tablinker INFO     [VT_1899_07_H1] Loading CEDAR/source-data//VT_1899_07_H1.ods
+2015-07-02 15:26:34,629 modules.tablinker.tablinker INFO     [VT_1899_07_H1] Found 1 sheets to process
+2015-07-02 15:26:53,095 modules.tablinker.tablinker INFO     [VT_1899_07_H1] Saving 124976 data triples

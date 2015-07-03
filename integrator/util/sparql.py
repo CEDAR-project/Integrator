@@ -3,30 +3,31 @@ from rdflib.term import URIRef, Literal
 
 PAGE_SIZE = 10000
 
+# Define the logger
+import logging
+log = logging.getLogger(__name__)
+
 class SPARQLWrap(object):
-    def __init__(self, configuration):
+    def __init__(self, end_point):
         '''
         Constructor
         '''
-        # Keep parameters
-        self.conf = configuration
-
-        # Store prefixes
-        self.prefixes = self.conf.get_prefixes()
+        # Set the end point
+        self.end_point = end_point
         
     def run_select(self, query, params = None):
         '''
         Execute a SPARQL select
         '''
-        sparql = SPARQLWrapper(self.conf.get_SPARQL())
+        sparql = SPARQLWrapper(self.end_point)
+        sparql.setReturnFormat(JSON)
+        
         if params != None:
             for (k,v) in params.iteritems():
                 query = query.replace(k,v)
-        query = self.prefixes + query
-        
         sparql.setQuery(query)
-        sparql.setReturnFormat(JSON)
-        #sparql.setCredentials('rdfread', 'red_fred')
+        log.info(query)
+        
         results = sparql.query().convert()
         
         return results["results"]["bindings"]
@@ -37,9 +38,8 @@ class SPARQLWrap(object):
         '''
         total_results = []
         offset = 0
-        sparql = SPARQLWrapper(self.conf.get_SPARQL())
+        sparql = SPARQLWrapper(self.end_point)
         sparql.setReturnFormat(JSON)
-        #sparql.setCredentials('rdfread', 'red_fred')
         if params != None:
             for (k,v) in params.iteritems():
                 query = query.replace(k,v)
@@ -57,20 +57,6 @@ class SPARQLWrap(object):
             offset = offset + PAGE_SIZE
         
         return total_results
-    
-    def run_construct(self, query, params = None):
-        '''
-        Execute a SPARQL construct
-        '''
-        sparql = SPARQLWrapper(self.conf.get_SPARQL())
-        if params != None:
-            for (k,v) in params.iteritems():
-                query = query.replace(k,v)
-        query = self.prefixes + query
-        sparql.setQuery(query)
-        #sparql.setCredentials('rdfread', 'red_fred')
-        results = sparql.query().convert()
-        return results
     
     def format(self, entry):
         v = None

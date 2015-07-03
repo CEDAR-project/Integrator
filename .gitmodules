@@ -1,6 +1,3 @@
 [submodule "DataDump"]
-	path = DataDump
+	path = data/DataDump
 	url = git@github.com:CEDAR-project/DataDump.git
-[submodule "Queries"]
-	path = Queries
-	url = git@github.com:CEDAR-project/Queries.git

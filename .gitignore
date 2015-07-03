@@ -5,3 +5,4 @@ credentials-virtuoso.txt
 *.pyc
 integrator.log
 /_cache/
+/config.ini

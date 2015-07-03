@@ -2,11 +2,10 @@ import bz2
 import os
 import sys
 import requests
-import glob
 import subprocess
 import multiprocessing
 
-BUFFER = "data/tmp/buffer.txt"
+BUFFER = "/tmp/buffer.txt"
 MAX_NT = 1000  # hard max apparently for Virtuoso
 
 # Working POST
@@ -18,19 +17,18 @@ def _push_chunk_thread(parameters):
     chunk = parameters['chunk']
     sparql = parameters['sparql']
     user = parameters['user']
-    pas = parameters['pas']
+    secret = parameters['secret']
     query = """
     DEFINE sql:log-enable 3 
     INSERT INTO <%s> {
     """ % graph_uri
     query = query + chunk + "}"
-    requests.post(sparql, auth=(user, pas), data={'query' : query})
+    requests.post(sparql, auth=(user, secret), data={'query' : query})
         
 class Pusher(object):
-    def __init__(self, sparql):
-        self.cred = ':'.join([c.strip() for c in open('credentials-virtuoso.txt')])
-        self.user = self.cred.split(':')[0]
-        self.pas = self.cred.split(':')[1]
+    def __init__(self, sparql, user, secret):
+        self.user = user
+        self.secret = secret
         self.sparql = sparql
         
     def clean_graph(self, uri):
@@ -39,7 +37,9 @@ class Pusher(object):
         DEFINE sql:log-enable 3 
         CLEAR GRAPH <%s>
         """ % uri
-        r = requests.post(self.sparql, auth=(self.user, self.pas), data={'query' : query})
+        r = requests.post(self.sparql, 
+                          auth=(self.user, self.secret),
+                          data={'query' : query})
         print r.status_code
     
     def upload_file(self, graph_uri, input_file):
@@ -70,7 +70,7 @@ class Pusher(object):
                               "graph_uri":graph_uri,
                               "sparql": self.sparql,
                               "user": self.user,
-                              "pas": self.pas})
+                              "secret": self.secret})
                 count = 0
                 chunk = ""
         # Store the last chunk
@@ -78,7 +78,7 @@ class Pusher(object):
                       "graph_uri":graph_uri,
                       "sparql": self.sparql,
                       "user": self.user,
-                      "pas": self.pas})
+                      "secret": self.secret})
         input_file.close()
                     
         # Send everything !

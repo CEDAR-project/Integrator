@@ -1,99 +1,61 @@
-#!/usr/bin/python2
 """
-Convert Excel files with matching style into RDF cubes
-
-Code derived from TabLinker
+TabLinker
 """
-import re
-import logging
-import datetime
-import bz2
-import os.path
-import pprint
-
-from rdflib import ConjunctiveGraph, Literal, RDF, URIRef
-from rdflib.namespace import RDFS, XSD
-from odf.opendocument import load
-from odf.table import Table, TableRow
-from odf.namespaces import TABLENS, STYLENS
-from odf import text, office, dc
-from odf.style import Style
-from common.configuration import Configuration
-from common import util
-
 import sys
 import exceptions
 reload(sys)
 import traceback
 sys.setdefaultencoding("utf8")  # @UndefinedVariable
 
-pp = pprint.PrettyPrinter(indent=2)
+import bz2
+import os.path
+import datetime
 
-def getColumns(row):
-    columns = []
-    node = row.firstChild
-    end = row.lastChild
-    while node != end:
-        (_, t) = node.qname
-        
-        # Focus on (covered) table cells only
-        if t != 'covered-table-cell' and t != 'table-cell':
-            continue
-        
-        # If the cell is covered insert a None, otherwise use the cell
-        n = node if t == 'table-cell' else None
-        columns.append(n)
-        
-        # Shall we repeat this ?
-        repeat = node.getAttrNS(TABLENS, 'number-columns-repeated')
-        if repeat != None:
-            repeat = int(repeat) - 1
-            while repeat != 0:
-                columns.append(n)
-                repeat = repeat - 1
-        
-        # Move to next node
-        node = node.nextSibling
-    return columns
+from namespace import TABLINKER, DCAT, PROV, OA
+from helpers import getColumns, colName, getText, clean_string
 
-def colName(number):
-    ordA = ord('A')
-    length = ord('Z') - ordA + 1
-    output = ""
-    while (number >= 0):
-        output = chr(number % length + ordA) + output
-        number = number // length - 1
-    return output
+from rdflib import ConjunctiveGraph, Literal, URIRef, Namespace
+from rdflib.namespace import RDF, RDFS, XSD, DCTERMS
+
+from odf import text, office, dc
+from odf.opendocument import load
+from odf.table import Table, TableRow
+from odf.namespaces import TABLENS, STYLENS
+from odf.style import Style
+
+import logging
+logger = logging.getLogger(__name__)
 
 
-def getText(cell_obj):
-    val = []
-    for c in cell_obj.childNodes:
-        if c.isInstanceOf(text.P):
-            val.append(str(c))
-    return ' '.join(val)
-
-
-class TabLink(object):
-    def __init__(self, conf, excelFileName, dataFileName, processAnnotations=False):
+class TabLinker(object):
+    def __init__(self, input_file_name, output_file_name, processAnnotations=False):
         """
         Constructor
         """
-        self.conf = conf
-        self.log = conf.getLogger("TabLink")
-        self.excelFileName = excelFileName
-        self.dataFileName = dataFileName
+        # Save the arguments
+        self.input_file_name = input_file_name
+        self.output_file_name = output_file_name
         self.processAnnotations = processAnnotations
-         
-        self.log.debug('Create graph')
+        
+        # Create the graph
         self.graph = ConjunctiveGraph()
-        self.conf.bindNamespaces(self.graph)
+        self.graph.bind('tablinker', TABLINKER)
+        self.graph.bind('prov', PROV)
+        self.graph.bind('dcat', DCAT)
+        self.graph.bind('oa', OA)
+        self.graph.bind('dcterms', DCTERMS)
+
+        # Set a default namespace
+        self.data_ns = Namespace("http://example.org/")
+        self.graph.bind('data', self.data_ns)
         
-        self.basename = os.path.basename(excelFileName)
-        self.basename = re.search('(.*)\.ods', self.basename).group(1)
+        # Compress by default
+        self.set_compress(True)
         
-        self.log.info('[{}] Loading {}'.format(self.basename, excelFileName))
-        self.book = load(unicode(excelFileName))
+        self.basename = os.path.basename(input_file_name).split('.')[0]
+                
+        logger.info('[{}] Loading {}'.format(self.basename, input_file_name))
+        self.book = load(unicode(input_file_name))
         self.stylesnames = {}
         for style in self.book.getElementsByType(Style):
             parentname = style.getAttrNS(STYLENS, 'parent-style-name')
@@ -101,90 +63,105 @@ class TabLink(object):
             if parentname != None:
                 self.stylesnames[name] = parentname
             
+    def set_target_namespace(self, namespace):
+        """
+        Set the target namespace used to prefix all the resources of the
+        data generated
+        """
+        self.data_ns = Namespace(namespace)
+        self.graph.namespace_manager.bind('data', self.data_ns, 
+                                          override=True, replace=True)
+    
+    def set_compress(self, value):
+        """
+        Set the usage of compression on or off
+        """
+        self.compress_output = value
+        
     def doLink(self):
         """
         Start processing all the sheets in workbook
         """
-        self.log.debug('[{}] Starting TabLink for all sheets in workbook'.format(self.basename))
+        logger.debug('[{}] Starting TabLink for all sheets in workbook'.format(self.basename))
         # keep the starting time (ex "2012-04-15T13:00:00-04:00")
         startTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                            datatype=self.conf.getURI('xsd', 'dateTime'))
+                            datatype=XSD.dateTime)
 
         sheets = self.book.getElementsByType(Table)
         
         # Process all the sheets
-        self.log.info('[{}] Found {} sheets to process'.format(self.basename,len(sheets)))
+        logger.info('[{}] Found {} sheets to process'.format(self.basename,len(sheets)))
         sheetURIs = []
         for n in range(len(sheets)) :
-            self.log.debug('Processing sheet {0}'.format(n))
+            logger.debug('Processing sheet {0}'.format(n))
             try:
                 (sheetURI, marked_count) = self.parseSheet(n, sheets[n])
                 if marked_count != 0:
                     # Describe the sheet
-                    self.graph.add((sheetURI, RDF.type, self.conf.getURI('tablink', 'Sheet')))
+                    self.graph.add((sheetURI, RDF.type, TABLINKER.Sheet))
                     self.graph.add((sheetURI, RDFS.label, Literal(sheets[n].getAttrNS(TABLENS, 'name'))))
                     # Add it to the dataset
                     sheetURIs.append(sheetURI)
             except Exception as detail:
-                self.log.error("Error processing sheet %d of %s" % (n, self.basename))
-                self.log.error(sys.exc_info()[0])
-                self.log.error(detail)
+                logger.error("Error processing sheet %d of %s" % (n, self.basename))
+                logger.error(sys.exc_info()[0])
+                logger.error(detail)
             
         # end time for the conversion process
         endTime = Literal(datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                          datatype=self.conf.getURI('xsd', 'dateTime'))
+                          datatype=XSD.dateTime)
         
         # Mint the URIs
-        datasetURI = self.conf.getURI('cedar', "{0}".format(self.basename))
-        distURI = self.conf.getURI('cedar', "{0}-dist".format(self.basename))
-        activityURI = self.conf.getURI('cedar', "{0}-tablink".format(self.basename))
-        srcURI = self.conf.getURI('cedar', "{0}-src".format(self.basename))
-        srcdistURI = self.conf.getURI('cedar', "{0}-src-dist".format(self.basename))
+        datasetURI = self.data_ns["{0}".format(self.basename)]
+        distURI = self.data_ns["{0}-dist".format(self.basename)]
+        activityURI = self.data_ns["{0}-tablink".format(self.basename)]
+        srcURI = self.data_ns["{0}-src".format(self.basename)]
+        srcdistURI = self.data_ns["{0}-src-dist".format(self.basename)]
         root = URIRef("https://raw.githubusercontent.com/CEDAR-project/DataDump/master/")
-        datasetDumpURI = root + os.path.relpath(self.dataFileName)
-        if self.conf.isCompress():
+        datasetDumpURI = root + os.path.relpath(self.output_file_name)
+        if self.compress_output:
             datasetDumpURI = datasetDumpURI + '.bz2' 
-        excelFileURI = root + self.excelFileName
+        excelFileURI = root + self.input_file_name
         
         # Describe the data set
-        self.graph.add((datasetURI, RDF.type, self.conf.getURI('dcat', 'DataSet')))
+        self.graph.add((datasetURI, RDF.type, DCAT.DataSet))
         self.graph.add((datasetURI, RDFS.label, Literal(self.basename)))
-        self.graph.add((datasetURI, self.conf.getURI('prov', 'wasDerivedFrom'), srcURI))
-        self.graph.add((datasetURI, self.conf.getURI('prov', 'wasGeneratedBy'), activityURI))
+        self.graph.add((datasetURI, PROV.wasDerivedFrom, srcURI))
+        self.graph.add((datasetURI, PROV.wasGeneratedBy, activityURI))
         for sheetURI in sheetURIs:
-            self.graph.add((datasetURI, self.conf.getURI('dcterms', 'hasPart'), sheetURI))
-        self.graph.add((datasetURI, self.conf.getURI('dcat', 'distribution'), distURI))
+            self.graph.add((datasetURI, DCTERMS.hasPart, sheetURI))
+        self.graph.add((datasetURI, DCAT.distribution, distURI))
         
         # Describe the distribution of the dataset
-        self.graph.add((distURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
-        dumpname = os.path.basename(self.dataFileName)
-        if self.conf.isCompress():
+        self.graph.add((distURI, RDF.type, DCAT.Distribution))
+        dumpname = os.path.basename(self.output_file_name)
+        if self.compress_output:
             dumpname = dumpname + '.bz2'
         self.graph.add((distURI, RDFS.label, Literal(dumpname)))
-        self.graph.add((distURI, self.conf.getURI('dcterms', 'accessURL'), datasetDumpURI))
+        self.graph.add((distURI, DCTERMS.accessURL, datasetDumpURI))
         
         # Describe the source of the dataset
-        self.graph.add((srcURI, RDF.type, self.conf.getURI('dcat', 'DataSet')))
-        self.graph.add((srcURI, RDFS.label, Literal(os.path.basename(self.excelFileName))))
-        self.graph.add((srcURI, self.conf.getURI('dcat', 'distribution'), srcdistURI))
-        self.graph.add((srcURI, self.conf.getURI('tablink', 'sheets'), Literal(len(sheets))))
+        self.graph.add((srcURI, RDF.type, DCAT.DataSet))
+        self.graph.add((srcURI, RDFS.label, Literal(os.path.basename(self.input_file_name))))
+        self.graph.add((srcURI, DCAT.distribution, srcdistURI))
+        self.graph.add((srcURI, TABLINKER.sheets, Literal(len(sheets))))
         
         # Describe the distribution of the source of the dataset
-        self.graph.add((srcdistURI, RDF.type, self.conf.getURI('dcat', 'Distribution')))
-        self.graph.add((srcdistURI, RDFS.label, Literal(os.path.basename(self.excelFileName))))
-        self.graph.add((srcdistURI, self.conf.getURI('dcterms', 'accessURL'), excelFileURI))
+        self.graph.add((srcdistURI, RDF.type, DCAT.Distribution))
+        self.graph.add((srcdistURI, RDFS.label, Literal(os.path.basename(self.input_file_name))))
+        self.graph.add((srcdistURI, DCTERMS.accessURL, excelFileURI))
         
         # The activity is the conversion process
-        self.graph.add((activityURI, RDF.type, self.conf.getURI('prov', 'Activity')))
-        self.graph.add((activityURI, self.conf.getURI('prov', 'startedAtTime'), startTime))
-        self.graph.add((activityURI, self.conf.getURI('prov', 'endedAtTime'), endTime))
-        self.graph.add((activityURI, self.conf.getURI('prov', 'wasAssociatedWith'), self.conf.getURI('tablink', "tabLink")))
-        self.graph.add((activityURI, self.conf.getURI('prov', 'used'), srcURI))
+        self.graph.add((activityURI, RDF.type, PROV.Activity))
+        self.graph.add((activityURI, PROV.startedAtTime, startTime))
+        self.graph.add((activityURI, PROV.endedAtTime, endTime))
+        self.graph.add((activityURI, PROV.wasAssociatedWith, TABLINKER.tabLink))
+        self.graph.add((activityURI, PROV.used, srcURI))
         
         # Save the graph
-        self.log.info('[{}] Saving {} data triples'.format(self.basename,len(self.graph)))
+        logger.info('[{}] Saving {} data triples'.format(self.basename,len(self.graph)))
         try :
-            out = bz2.BZ2File(self.dataFileName + '.bz2', 'wb', compresslevel=9) if self.conf.isCompress() else open(self.dataFileName, "w")
+            out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.compress_output else open(self.output_file_name, "w")
             self.graph.serialize(destination=out, format='n3')
             out.close()
         except :
@@ -197,10 +174,10 @@ class TabLink(object):
         Parses the currently selected sheet in the workbook, takes no arguments. Iterates over all cells in the Excel sheet and produces relevant RDF Triples. 
         """        
         # Define a sheetURI for the current sheet
-        sheetURI = self.conf.getURI('cedar', "{0}-S{1}".format(self.basename, n))        
+        sheetURI = self.data_ns["{0}-S{1}".format(self.basename, n)]       
         
         columnDimensions = {}
-        rowDimensions = {}
+        row_dims = {}
         rowProperties = {}
         marked_count = 0
         
@@ -248,7 +225,7 @@ class TabLink(object):
                     'sheetURI' : sheetURI
                 }
                 
-                # self.log.debug("({},{}) {}/{}: \"{}\"". format(i, j, cellType, cellName, cellValue))
+                # logger.debug("({},{}) {}/{}: \"{}\"". format(i, j, cellType, cellName, cellValue))
 
                 # Increase the counter of marked cells
                 if cell['type'] in ['TL Data', 'TL RowHeader', 'TL HRowHeader', 'TL ColHeader', 'TL RowProperty']:
@@ -256,11 +233,11 @@ class TabLink(object):
                     
                 # Parse cell content
                 if cell['type'] == 'TL Data':
-                    self.handleData(cell, columnDimensions, rowDimensions)
+                    self.handleData(cell, columnDimensions, row_dims)
                 elif cell['type'] == 'TL RowHeader' :
-                    self.handleRowHeader(cell, rowDimensions, rowProperties)
+                    self.handleRowHeader(cell, row_dims, rowProperties)
                 elif cell['type'] == 'TL HRowHeader' :
-                    self.handleHRowHeader(cell, rowDimensions, rowProperties)
+                    self.handleHRowHeader(cell, row_dims, rowProperties)
                 elif cell['type'] == 'TL ColHeader' :
                     self.handleColHeader(cell, columnDimensions)
                 elif cell['type'] == 'TL RowProperty' :
@@ -274,13 +251,13 @@ class TabLink(object):
                     self.handleAnnotation(cell, annotations[0])
                 
         # Relate all the row properties to their row headers
-        for rowDimension in rowDimensions:
-                for (p, vs) in rowDimensions[rowDimension].iteritems():
+        for rowDimension in row_dims:
+                for (p, vs) in row_dims[rowDimension].iteritems():
                     for v in vs:
                         try:
-                            self.graph.add((v, self.conf.getURI('tablink', 'parentCell'), p))
+                            self.graph.add((v, TABLINKER.parentCell, p))
                         except exceptions.AssertionError:
-                            self.log.debug('Ignore {}'.format(p))
+                            logger.debug('Ignore {}'.format(p))
                             
         # Add additional information about the hierarchy of column headers
         # for value in columnDimensions.values():
@@ -299,44 +276,44 @@ class TabLink(object):
             stylename = stylename.replace('_20_', ' ') 
         return stylename
     
-    def handleData(self, cell, columnDimensions, rowDimensions) :
+    def handleData(self, cell, columnDimensions, row_dims) :
         """
         Create relevant triples for the cell marked as Data
         """
         if cell['isEmpty']:
             return
         
-        self.log.debug("({},{}) Handle data cell".format(cell['i'], cell['j']))
+        logger.debug("({},{}) Handle data cell".format(cell['i'], cell['j']))
                 
         # Add the cell to the graph
-        self._createCell(cell, self.conf.getURI('tablink', 'DataCell'))
+        self._create_cell(cell, TABLINKER.DataCell)
             
         # Bind all the row dimensions
         try :
-            for dims in rowDimensions[cell['i']].itervalues():
+            for dims in row_dims[cell['i']].itervalues():
                 for dim in dims:
-                    self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
+                    self.graph.add((cell['URI'], TABLINKER.dimension, dim))
         except KeyError :
-            self.log.debug("({},{}) No row dimension for cell".format(cell['i'], cell['j']))
+            logger.debug("({},{}) No row dimension for cell".format(cell['i'], cell['j']))
         
         # Bind all the column dimensions
         try :
             for dim in columnDimensions[cell['j']]:
-                self.graph.add((cell['URI'], self.conf.getURI('tablink', 'dimension'), dim))
+                self.graph.add((cell['URI'], TABLINKER.dimension, dim))
         except KeyError :
-            self.log.debug("({},{}) No column dimension for cell".format(cell['i'], cell['j']))
+            logger.debug("({},{}) No column dimension for cell".format(cell['i'], cell['j']))
         
-    def handleRowHeader(self, cell, rowDimensions, rowProperties) :
+    def handleRowHeader(self, cell, row_dims, rowProperties) :
         """
         Create relevant triples for the cell marked as RowHeader
         """
         if cell['isEmpty']:
             return
 
-        self.log.debug("({},{}) Handle row header : {}".format(cell['i'], cell['j'], cell['value']))
+        logger.debug("({},{}) Handle row header : {}".format(cell['i'], cell['j'], cell['value']))
         
         # Add the cell to the graph
-        self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
+        self._create_cell(cell, TABLINKER.RowHeader)
         
         # Get the row        
         i = cell['i']
@@ -347,9 +324,9 @@ class TabLink(object):
         except exceptions.KeyError:
             prop = 'NonExistingRowHeader%d' % j 
         
-        rowDimensions.setdefault(i, {})
-        rowDimensions[i].setdefault(prop, [])
-        rowDimensions[i][prop].append(cell['URI'])
+        row_dims.setdefault(i, {})
+        row_dims[i].setdefault(prop, [])
+        row_dims[i][prop].append(cell['URI'])
         
         # Look if we cover other cells verticaly 
         rows_spanned = cell['cell'].getAttrNS(TABLENS, 'number-rows-spanned')
@@ -357,13 +334,13 @@ class TabLink(object):
             rows_spanned = int(rows_spanned)
             for extra in range(1, rows_spanned):
                 spanned_row = cell['i'] + extra
-                self.log.debug("Span over ({},{})".format(spanned_row, cell['j']))
-                rowDimensions.setdefault(spanned_row, {})
-                rowDimensions[spanned_row].setdefault(prop, [])
-                rowDimensions[spanned_row][prop].append(cell['URI'])
+                logger.debug("Span over ({},{})".format(spanned_row, cell['j']))
+                row_dims.setdefault(spanned_row, {})
+                row_dims[spanned_row].setdefault(prop, [])
+                row_dims[spanned_row][prop].append(cell['URI'])
  
     
-    def handleHRowHeader(self, cell, rowDimensions, rowProperties) :
+    def handleHRowHeader(self, cell, row_dims, rowProperties) :
         """
         Build up lists for hierarchical row headers. 
         Cells marked as hierarchical row header are often empty meaning 
@@ -375,25 +352,25 @@ class TabLink(object):
         j = cell['j']
         prop = rowProperties[j]
         
-        self.log.debug("({},{}) Handle HRow header".format(cell['i'], cell['j']))
+        logger.debug("({},{}) Handle HRow header".format(cell['i'], cell['j']))
         
         if (cell['isEmpty'] or cell['value'].lower() == 'id.' or cell['value'].lower() == 'id ') :
             # If the cell is empty, and a HierarchicalRowHeader, add the value of the row header above it.
             # If the cell is exactly 'id.', add the value of the row header above it.
             try:
-                rowDimensions.setdefault(i, {})
-                rowDimensions[i].setdefault(prop, [])
-                rowDimensions[i][prop].append(rowDimensions[i - 1][prop][0])
+                row_dims.setdefault(i, {})
+                row_dims[i].setdefault(prop, [])
+                row_dims[i][prop].append(row_dims[i - 1][prop][0])
             except:
                 pass
-            # self.log.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
+            # logger.debug("({},{}) Copied from above\nRow hierarchy: {}".format(i, j, rowValues[i]))
         elif not cell['isEmpty']:
             # Add the cell to the graph
-            self._createCell(cell, self.conf.getURI('tablink', 'RowHeader'))
-            rowDimensions.setdefault(i, {})
-            rowDimensions[i].setdefault(prop, [])
-            rowDimensions[i][prop].append(cell['URI'])
-            # self.log.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowValues[i]))
+            self._create_cell(cell, TABLINKER.RowHeader)
+            row_dims.setdefault(i, {})
+            row_dims[i].setdefault(prop, [])
+            row_dims[i][prop].append(cell['URI'])
+            # logger.debug("({},{}) Added value\nRow hierarchy {}".format(i, j, rowValues[i]))
 
         # Look if we cover other cells verticaly 
         rows_spanned = cell['cell'].getAttrNS(TABLENS, 'number-rows-spanned')
@@ -401,22 +378,22 @@ class TabLink(object):
             rows_spanned = int(rows_spanned)
             for extra in range(1, rows_spanned):
                 spanned_row = cell['i'] + extra
-                self.log.debug("Span over ({},{})".format(spanned_row, cell['j']))
-                rowDimensions.setdefault(spanned_row, {})
-                rowDimensions[spanned_row].setdefault(prop, [])
-                rowDimensions[spanned_row][prop].append(cell['URI'])
+                logger.debug("Span over ({},{})".format(spanned_row, cell['j']))
+                row_dims.setdefault(spanned_row, {})
+                row_dims[spanned_row].setdefault(prop, [])
+                row_dims[spanned_row][prop].append(cell['URI'])
     
     def handleColHeader(self, cell, columnDimensions) :
         """
         Create relevant triples for the cell marked as Header
         """
         # Add the col header to the graph
-        self.log.debug("({},{}) Add column header \"{}\"".format(cell['i'], cell['j'], cell['value']))
-        self._createCell(cell, self.conf.getURI('tablink', 'ColumnHeader'))
+        logger.debug("({},{}) Add column header \"{}\"".format(cell['i'], cell['j'], cell['value']))
+        self._create_cell(cell, TABLINKER.ColumnHeader)
         
         # If there is already a parent dimension, connect to it
         if cell['j'] in columnDimensions:
-            self.graph.add((cell['URI'], self.conf.getURI('tablink', 'parentCell'), columnDimensions[cell['j']][-1]))    
+            self.graph.add((cell['URI'], TABLINKER.parentCell, columnDimensions[cell['j']][-1]))    
         dimension = cell['URI']
             
         # Add the dimension to the dimensions list for that column
@@ -428,7 +405,7 @@ class TabLink(object):
             columns_spanned = int(columns_spanned)
             for extra in range(1, columns_spanned):
                 spanned_col = cell['j'] + extra
-                self.log.debug("Span over ({},{})".format(cell['i'], spanned_col))
+                logger.debug("Span over ({},{})".format(cell['i'], spanned_col))
                 columnDimensions.setdefault(spanned_col, []).append(dimension)
         
         
@@ -438,8 +415,8 @@ class TabLink(object):
         """
         
         # Add the cell to the graph
-        self.log.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
-        self._createCell(cell, self.conf.getURI('tablink', 'RowProperty'))
+        logger.debug("({},{}) Add property dimension \"{}\"".format(cell['i'], cell['j'], cell['value']))
+        self._create_cell(cell, TABLINKER.RowProperty)
         rowProperties[cell['j']] = cell['URI']        
         
         # Look if we cover other cells
@@ -447,7 +424,7 @@ class TabLink(object):
         if columns_spanned != None:
             columns_spanned = int(columns_spanned)
             for extra in range(1, columns_spanned):
-                self.log.debug("Span over ({},{})".format(cell['i'], cell['j'] + extra))
+                logger.debug("Span over ({},{})".format(cell['i'], cell['j'] + extra))
                 rowProperties[cell['j'] + extra] = cell['URI']
             
     
@@ -455,7 +432,9 @@ class TabLink(object):
         """
         Create relevant triples for the cell marked as Title 
         """
-        self.graph.add((cell['sheetURI'], RDFS.comment, Literal(util.clean_string(cell['value']))))        
+        self.graph.add((cell['sheetURI'],
+                        RDFS.comment,
+                        Literal(clean_string(cell['value']))))        
     
     def handleAnnotation(self, cell, annotation) :
         """
@@ -466,58 +445,65 @@ class TabLink(object):
         annotation_URI = cell['URI'] + "-oa"
         annotation_body_URI = annotation_URI + '-body'
 
-        self.graph.add((annotation_URI, RDF.type, self.conf.getURI('oa', 'Annotation')))
-        self.graph.add((annotation_URI, self.conf.getURI('oa', 'hasTarget'), cell['URI']))
-        self.graph.add((annotation_URI, self.conf.getURI('oa', 'hasBody'), annotation_body_URI))
+        self.graph.add((annotation_URI, RDF.type, OA.Annotation))
+        self.graph.add((annotation_URI, OA.hasTarget, cell['URI']))
+        self.graph.add((annotation_URI, OA.hasBody, annotation_body_URI))
         
         self.graph.add((annotation_body_URI, RDF.type, RDFS.Resource))
-        self.graph.add((annotation_body_URI, self.conf.getURI('tablink', 'value'), Literal(util.clean_string(getText(annotation)))))
+        self.graph.add((annotation_body_URI,
+                        TABLINKER.value,
+                        Literal(clean_string(getText(annotation)))))
+        
         # Extract author
         author = annotation.getElementsByType(dc.Creator)
         if len(author) > 0:
-            author = util.clean_string(str(author[0]))
-            self.graph.add((annotation_body_URI, self.conf.getURI('oa', 'annotatedBy'), Literal(author)))
+            author = clean_string(str(author[0]))
+            self.graph.add((annotation_body_URI, OA.annotatedBy, Literal(author)))
+            
         # Extract date
         creation_date = annotation.getElementsByType(dc.Date)
         if len(creation_date) > 0:
             creation_date = str(creation_date[0])
-            self.graph.add((annotation_body_URI, self.conf.getURI('oa', 'serializedAt'), Literal(creation_date, datatype=XSD.date)))
+            self.graph.add((annotation_body_URI, OA.serializedAt, Literal(creation_date, datatype=XSD.date)))
             
-    # ##
-    #    Utility Functions
-    # ## 
-    def _createCell(self, cell, cell_type):
+    def _create_cell(self, cell, cell_type):
         """
         Create a new cell
         """
         
         # Set the value
-        value = Literal(util.clean_string(cell['value']))
+        value = Literal(clean_string(cell['value']))
             
         # It's a cell
         self.graph.add((cell['URI'], RDF.type, cell_type))
         
         # It's in the data set defined by the current sheet
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'sheet'), cell['sheetURI']))
+        self.graph.add((cell['URI'], TABLINKER.sheet, cell['sheetURI']))
         
         # Add its value (removed the datatype=XSD.decimal because we can't be sure)
-        self.graph.add((cell['URI'], self.conf.getURI('tablink', 'value'), value))
+        self.graph.add((cell['URI'], TABLINKER.value, value))
         
         # Add a cell label
         label = "Cell %s=%s" % (cell['name'], cell['value'])
         self.graph.add((cell['URI'], RDFS.label, Literal(label)))
         
 if __name__ == '__main__':
-    config = Configuration('config.ini')
-    config.setVerbose(False)
+    root_logger = logging.getLogger('')
+    root_logger.setLevel(logging.DEBUG)
+    logFormat = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+        
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter(logFormat))
+    root_logger.addHandler(ch)
     
     # Test
     #inputFile = "data-test/gambia-wages-prices-welfare-ratio.ods"
     #inputFile = "data-test/VT_1899_07_H1.ods"
-    inputFile = 'DataDump/source-data/VT_1879_01_H1.ods'
-    dataFile = "/tmp/data.ttl"
+    inputFile = 'data-test/simple.ods'
+    outputFile = "/tmp/data.ttl"
 
-    tLinker = TabLink(config, inputFile, dataFile, processAnnotations=True)
+    tLinker = TabLinker(inputFile, outputFile, processAnnotations=True)
+    tLinker.set_target_namespace("http://example.com/")
     tLinker.doLink()
     
 
