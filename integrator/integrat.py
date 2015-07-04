@@ -81,7 +81,7 @@ class Integrator(object):
             task = {'dataset' : dataset,
                     'output'  : output,
                     'endpoint': self._conf.get_SPARQL(),
-                    'target'  :self._conf.get_namespace('data'),
+                    'target'  : self._conf.get_namespace('data'),
                     'raw-data': self._conf.get_graph_name('raw-data'),
                     'mappings': self._conf.get_path('mappings'),
                     'compress': self._conf.isCompress()}

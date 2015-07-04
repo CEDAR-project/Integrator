@@ -1,12 +1,12 @@
 import os
 
-from rdflib.term import URIRef
+from rdflib.term import URIRef, Literal
 from xlrd import open_workbook
 from xlutils.margins import number_of_good_cols, number_of_good_rows
 
 class MappingsList(object):
     
-    def __init__(self, data, configuration):
+    def __init__(self, data):
         self._mappings = {}
         
         self.excelFileName = data['file']

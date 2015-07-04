@@ -99,9 +99,8 @@ class RuleMaker(object):
             # Keep the start time
             startTime = self._now()
                 
-            log.debug("Start processing %s" % dims)
             for dim in dims:
-                log.debug("=> %s" % dim)
+                log.debug("[{}] Processing mappings : {}".format(self.dataset, dim))
                 count = self._process_mapping(self.graph, activity_URI, dim)
                 
                 if count != 0:
@@ -127,12 +126,12 @@ class RuleMaker(object):
             self.graph.add((activity_URI, PROV.wasAssociatedWith, INTEGRATOR_URI))
     
             # Save the graph
-            log.info("[{}] Saving {} data triples.".format(self.dataset, len(self.graph)))
-            try :
+            log.info("[{}] Saving {} triples.".format(self.dataset, len(self.graph)))
+            try:
                 out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.compress_output else open(self.output_file_name, "w")
                 self.graph.serialize(destination=out, format='n3')
                 out.close()
-            except :
+            except:
                 log.error("[{}] Whoops! Something went wrong in serialising to output file".format(self.dataset))
         
         except:
@@ -185,7 +184,7 @@ class RuleMaker(object):
         '''
         # Load and execute the SPARQL query, save to the cache too
         sparql = SPARQLWrap(self.end_point)
-        sparql_params = {'__DATA_SET__' : URIRef(self.dataset).n3(),
+        sparql_params = {'__DATA_SET__' : self.data_ns[self.dataset].n3(),
                          '__RAW_DATA__' : graph_name}
         results = sparql.run_select(HEADERS_QUERY, sparql_params)
         for result in results:
@@ -210,18 +209,18 @@ class RuleMaker(object):
         @input sections filter the sections to load
         '''
         # Read the metadata file
-        log.info("[%s] Loading mappings" % self.dataset)
+        log.info("[{}] Loading mappings".format(self.dataset))
         metadata = SafeConfigParser()
         metadata.read(mappingFilesPath + "/metadata.txt")
         for section in metadata.sections():
             if sections != None and section not in sections:
                 continue
             try:
-                log.debug("=> %s" % section)
+                log.debug("[{}] Loading mapping section : {}".format(self.dataset, section))
                 data = dict(metadata.items(section))
                 data['path'] = mappingFilesPath
-                mappingsList = MappingsList(data, self.conf)
+                mappingsList = MappingsList(data)
                 self.mappings[section] = mappingsList
-            except:
-                log.error("[{}] Something bad happened with {} : {}".format(self.dataset, section, sys.exc_info()[0]))
+            except Exception as e:
+                log.error("[{}] Error loading {} : {}".format(self.dataset, section, e))
               
