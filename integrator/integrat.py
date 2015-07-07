@@ -9,6 +9,7 @@ from util.sparql import SPARQLWrap
 # Import modules for the pipeline
 from modules.tablinker.tablinker import TabLinker
 from modules.rules.rulesmaker import RuleMaker
+from modules.rules.rulesinject import RulesInjector
 from modules.cube.cubemaker import CubeMaker
 
 # Define the logger
@@ -29,7 +30,7 @@ class Integrator(object):
         self._conf = configuration
         
         # Create the output paths if necessary
-        for path in ['raw-data', 'mappings', 'rules', 'release']:
+        for path in ['raw-data', 'mappings', 'rules', 'release', 'enriched-src']:
             if not os.path.exists(self._conf.get_path(path)):
                 os.makedirs(self._conf.get_path(path))
             
@@ -41,8 +42,6 @@ class Integrator(object):
         '''
         # Prepare a task list
         tasks = []
-        
-        # Go check all the files one by one, push a task if needed
         input_files = glob.glob(self._conf.get_path('source-data') + '/*.ods')
         for input_file in sorted(input_files):
             name = os.path.basename(input_file).split('.')[0]
@@ -111,6 +110,7 @@ class Integrator(object):
                     'endpoint'       : self._conf.get_SPARQL(),
                     'compress'       : self._conf.isCompress(),
                     'target'         : self._conf.get_namespace('data'),
+                    'release_graph'  : self._conf.get_graph_name('release'),
                     'raw_data_graph' : self._conf.get_graph_name('raw-data'),
                     'rules_graph'    : self._conf.get_graph_name('rules')}
             tasks.append(task)
@@ -126,11 +126,22 @@ class Integrator(object):
         self._push_to_graph(self._conf.get_graph_name('release'),
                             self._conf.get_path('release'))
     
+        # Create an instance of CubeMaker
+        cubeMaker = CubeMaker(self._conf.get_SPARQL(),
+                              self._conf.get_graph_name('release'),
+                              self._conf.get_graph_name('raw-data'),
+                              self._conf.get_graph_name('rules'))
+        cubeMaker.set_target_namespace(self._conf.get_namespace('data'))
+        cubeMaker.set_compress(self._conf.isCompress())
+        
         # Update the DSD
         dsd_file_name = self._conf.get_path('release') + 'dsd.ttl'
         log.info("Asking CubeMaker to generate the DSD")
-        cubeMaker = CubeMaker()
-        cubeMaker.generate_dsd(self._conf.get_SPARQL(), self._conf.get_graph_name('release'), dsd_file_name)
+        cubeMaker.generate_dsd(self._conf.get_cube_title(),
+                               self._conf.get_measure(),
+                               self._conf.get_measureunit(),
+                               self._conf.get_slices(),
+                               dsd_file_name)
         
         # Load the DSD
         pusher = Pusher(self._conf.get_SPARUL(),
@@ -140,9 +151,33 @@ class Integrator(object):
         if self._conf.isCompress():
             dsd_file_name = dsd_file_name + ".bz2"
         pusher.upload_file(self._conf.get_graph_name('release'), dsd_file_name)
-    
-    def generate_enhanced_source_files(self):
-        pass
+        
+    def generate_enriched_source_files(self):
+        '''
+        This step opens all the source files and inject the mappings rules
+        back into them as annotations. This optional part of the workflow
+        generates files that are useful for assessing what has been generated
+        ''' 
+        # Prepare a task list
+        tasks = []
+        input_files = glob.glob(self._conf.get_path('source-data') + '/*.ods')
+        for input_file in sorted(input_files):
+            base_name = os.path.basename(input_file)
+            output_file = self._conf.get_path('enriched-src') + base_name
+            task = {'input_file'     : input_file,
+                    'output_file'    : output_file,
+                    'base_name'      : base_name,
+                    'endpoint'       : self._conf.get_SPARQL(),
+                    'raw_data_graph' : self._conf.get_graph_name('raw-data'),
+                    'rules_graph'    : self._conf.get_graph_name('rules')}
+            tasks.append(task)
+
+        # Call cube in parallel, avoid hammering the store too much
+        cpu_count = multiprocessing.cpu_count()
+        pool = multiprocessing.Pool(processes=min(4, cpu_count))
+        pool.map(generate_enriched_source_files_thread, tasks)
+        pool.close()
+        pool.join()
     
     def _get_sheets_list(self):
         '''
@@ -207,9 +242,26 @@ def generate_release_thread(parameters):
     output_file = parameters['output_file']
     log.info("[{}] Calling CubeMaker".format(sheet_name))
     try:
-        cubeMaker = CubeMaker()
+        cubeMaker = CubeMaker(parameters['endpoint'],
+                              parameters['release_graph'], 
+                              parameters['raw_data_graph'], 
+                              parameters['rules_graph'])
         cubeMaker.set_target_namespace(parameters['target'])
         cubeMaker.set_compress(parameters['compress'])
-        cubeMaker.process(parameters['endpoint'], parameters['raw_data_graph'], parameters['rules_graph'], sheet_name, output_file)
+        cubeMaker.process(sheet_name, output_file)
     except Exception as e:
         log.error("[{}] Error in CubeMaker: {}".format(sheet_name, e))
+
+def generate_enriched_source_files_thread(parameters):
+    '''
+    Worker thread for generate_enriched_source_files
+    '''
+    log.info("[{}] Calling RulesInjector".format(parameters['base_name']))
+    try:
+        rulesInjector = RulesInjector(parameters['endpoint'],
+                                      parameters['rules_graph'],
+                                      parameters['raw_data_graph']) 
+        rulesInjector.process_workbook(parameters['input_file'], parameters['output_file'])
+    except Exception as e:
+        log.error("[{}] Error in RulesInjector: {}".format(parameters['base_name'], e))
+    

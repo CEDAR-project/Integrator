@@ -4,7 +4,7 @@ import pprint
 
 from rdflib import ConjunctiveGraph, RDF, URIRef
 from util.sparql import SPARQLWrap
-from rdflib.term import Literal
+from rdflib.term import Literal, BNode
 from rdflib.namespace import RDFS, DCTERMS, XSD, Namespace
 from ConfigParser import SafeConfigParser
 
@@ -153,7 +153,7 @@ class RuleMaker(object):
                 count = count + 1
                 # Mint URIs
                 annotation_URI = URIRef(cell_uri + "-mapping")
-                annotation_body_URI = annotation_URI + "-body"
+                annotation_body_URI = BNode()
                 # Add the triples
                 graph.add((annotation_URI, RDF.type, OA.Annotation))
                 graph.add((annotation_URI, RDFS.label, Literal('Mapping')))
@@ -162,8 +162,6 @@ class RuleMaker(object):
                 graph.add((annotation_URI, OA.serializedAt, self._now()))
                 graph.add((annotation_URI, OA.serializedBy, INTEGRATOR_URI))
                 graph.add((annotation_URI, PROV.wasGeneratedBy, activity_URI))
-                graph.add((annotation_body_URI, RDF.type, RDFS.Resource))
-                graph.add((annotation_body_URI, RDFS.label, Literal('Mapping body')))
                 for pair in pairs:
                     (p,o) = pair
                     graph.add((annotation_body_URI, p, o))

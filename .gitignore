@@ -1,5 +1,6 @@
 .project
 .pydevproject
+.settings
 credentials-easy.txt
 credentials-virtuoso.txt
 *.pyc

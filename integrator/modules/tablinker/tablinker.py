@@ -485,7 +485,7 @@ class TabLinker(object):
         self.graph.add((cell['URI'], TABLINKER.value, value))
         
         # Add a cell label
-        label = "Cell %s=%s" % (cell['name'], cell['value'])
+        label = "%s=%s" % (cell['name'], cell['value'])
         self.graph.add((cell['URI'], RDFS.label, Literal(label)))
         
 if __name__ == '__main__':

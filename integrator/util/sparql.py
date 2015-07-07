@@ -27,6 +27,7 @@ class SPARQLWrap(object):
                 query = query.replace(k,v)
         sparql.setQuery(query)
         
+        log.debug("Sending query to {} : {}".format(self.end_point, query))
         results = sparql.query().convert()
         
         return results["results"]["bindings"]

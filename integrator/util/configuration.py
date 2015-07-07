@@ -2,6 +2,8 @@ from ConfigParser import SafeConfigParser
 from rdflib.term import URIRef
 
 import logging
+import glob
+import os
 log = logging.getLogger(__name__)
 
 class Configuration(object):
@@ -10,8 +12,8 @@ class Configuration(object):
             # Read the config file
             self.config = SafeConfigParser()
             self.config.read(configFileName)
-        except :
-            log.error("Could not find configuration file")
+        except Exception as e:
+            log.error("Error loading the configuration file : " + e)
         
     def isCompress(self):
         return self.config.get('debug', 'compress') == '1';
@@ -40,18 +42,27 @@ class Configuration(object):
     def get_namespace(self, name):
         return self.config.get('namespaces', name)
     
-    def get_prefixes(self):
-        '''
-        prefix tablink: <http://example.org/ns/tablink#> 
-        prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
-        '''
-        prefixes = ""
-        for (name, value) in self.namespaces.iteritems():
-            prefixes = "%s prefix %s: <%s>\n" % (prefixes, name, value)
-        return prefixes
-        
-    def curify(self, string):
-        for (name, value) in self.namespaces.iteritems():
-            if string.startswith(value):
-                return string.replace(value, name + ':')
-        return string
+    def get_slices(self):
+        res = []
+        slices = [s for s in self.config.sections() if s.startswith('slice-')]
+        for s in slices:
+            slice_def = {}
+            slice_def['title']    = self.config.get(s, 'title')
+            sources = glob.glob(self.get_path('source-data') + '/' + 
+                                    self.config.get(s, 'sources'))
+            files = [os.path.basename(src) for src in sources]
+            slice_def['sources']  = files
+            slice_def['property'] = self.config.get(s, 'property')
+            slice_def['value']    = self.config.get(s, 'value')
+            res.append(slice_def)
+        return res
+    
+    def get_measure(self):
+        return self.config.get('cube', 'measure')
+
+    def get_measureunit(self):
+        return self.config.get('cube', 'measureunit')
+
+    def get_cube_title(self):
+        return self.config.get('cube', 'title')
+    
