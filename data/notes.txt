@@ -1,0 +1,3 @@
+http://stackoverflow.com/questions/2227062/how-do-i-move-a-git-branch-out-into-its-own-repository
+http://stackoverflow.com/questions/1911109/clone-a-specific-git-branch
+http://stackoverflow.com/questions/23344320/there-isnt-anything-to-compare-nothing-to-compare-branches-are-entirely-diffe

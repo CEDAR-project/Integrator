@@ -1,3 +1,0 @@
-[submodule "DataDump"]
-	path = data/DataDump
-	url = git@github.com:CEDAR-project/DataDump.git
