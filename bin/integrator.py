@@ -1,12 +1,13 @@
 #!/usr/bin/python2
-from util.configuration import Configuration
-from integrat import Integrator
 
 import sys
 import os
 import os.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                 '../integrator')))
+
+from util.configuration import Configuration
+from integrat import Integrator
 
 # Create the logger
 import logging

@@ -1,13 +1,18 @@
+import glob
+import os
+import sys
 from ConfigParser import SafeConfigParser
 from rdflib.term import URIRef
 
 import logging
-import glob
-import os
 log = logging.getLogger(__name__)
 
 class Configuration(object):
     def __init__(self, configFileName):
+        if not os.path.isfile(configFileName):
+            print "Configuration file not found !"
+            sys.exit(-1)
+        
         try :
             # Read the config file
             self.config = SafeConfigParser()
