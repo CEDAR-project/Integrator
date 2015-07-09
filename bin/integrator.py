@@ -2,6 +2,12 @@
 from util.configuration import Configuration
 from integrat import Integrator
 
+import sys
+import os
+import os.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                                '../integrator')))
+
 # Create the logger
 import logging
 log = logging.getLogger(__name__)
