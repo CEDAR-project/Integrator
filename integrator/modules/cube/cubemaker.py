@@ -182,23 +182,18 @@ class CubeMaker(object):
             log.error("Whoops! Something went wrong in serializing to output file")
             log.info(sys.exc_info())
         
-    def process(self, sheet_name, output_file):        
+    def process(self, measure, sheet_name, output_file):        
         """
         Process all the data cells in the target sheet and look for rules to
         harmonise them, save the output into outputfile_name
         """
-        # Get the name of the slice to use for these observations
-        # key = '_'.join(sheet_uri.split('/')[-1].split('_')[:2]) 
-        # slice_uri = self._ds_uri + '-slice-' + key
-        
-        # Fix the parameters for the SPARQL queries
+        # Set the parameters for the SPARQL queries
         query_params = {'SHEET'        : self.data_ns[sheet_name],
                         '__RAW_DATA__' : self.raw_data_graph_name,
-                        '__RULES__'    : self.rules_graph_name}
+                        '__RULES__'    : self.rules_graph_name,
+                        '__MEASURE__'  : measure}
         
         # Prepare the SPARQL construct
-        # FIXME With this construct the observation also get the rdfs:label of the mapping body
-        # <SLICE> qb:observation `iri(bif:concat(?cell,"-h"))`.
         query = """
         PREFIX qb: <http://purl.org/linked-data/cube#>
         PREFIX prov: <http://www.w3.org/ns/prov#>
@@ -207,7 +202,7 @@ class CubeMaker(object):
         
         CONSTRUCT {
             `iri(bif:concat(?cell,"-h"))` a qb:Observation;
-                <http://example.org/cedarterms#population> ?popcount;
+                <__MEASURE__> ?popcount;
                 ?dim ?val;
                 prov:wasDerivedFrom ?cell;
                 prov:wasGeneratedBy `iri(bif:concat(?cell,"-activity"))`.

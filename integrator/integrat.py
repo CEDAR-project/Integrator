@@ -112,7 +112,8 @@ class Integrator(object):
                     'target'         : self._conf.get_namespace('data'),
                     'release_graph'  : self._conf.get_graph_name('release'),
                     'raw_data_graph' : self._conf.get_graph_name('raw-data'),
-                    'rules_graph'    : self._conf.get_graph_name('rules')}
+                    'rules_graph'    : self._conf.get_graph_name('rules'),
+                    'measure'        : self._conf.get_measure()}
             tasks.append(task)
 
         # Call cube in parallel, avoid hammering the store too much
@@ -248,7 +249,7 @@ def generate_release_thread(parameters):
                               parameters['rules_graph'])
         cubeMaker.set_target_namespace(parameters['target'])
         cubeMaker.set_compress(parameters['compress'])
-        cubeMaker.process(sheet_name, output_file)
+        cubeMaker.process(parameters['measure'], sheet_name, output_file)
     except Exception as e:
         log.error("[{}] Error in CubeMaker: {}".format(sheet_name, e))
 
