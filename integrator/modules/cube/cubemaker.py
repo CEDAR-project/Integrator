@@ -157,10 +157,18 @@ class CubeMaker(object):
             graph.add((slicekey_uri, RDFS.label, Literal(s['title'])))
             graph.add((slicekey_uri, QB.componentProperty, URIRef(s['property'])))
             
+            # Try to guess the type of the value
+            casted_val = s['value']
+            try:
+                casted_val = int(casted_val)
+            except ValueError:
+                pass
+            val = Literal(casted_val)
+            
             # Describe the slice
             graph.add((slice_uri, RDF.type, QB.Slice))
             graph.add((slice_uri, QB.sliceStructure, slicekey_uri))
-            graph.add((slice_uri, URIRef(s['property']), Literal(s['value'])))
+            graph.add((slice_uri, URIRef(s['property']), val))
         
             # Attach all the relevant observations to it
             sparql = SPARQLWrap(self.end_point)
