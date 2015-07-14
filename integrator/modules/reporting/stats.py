@@ -10,6 +10,9 @@ from jinja2 import Template
 # TODO: How many rules per dataset ?
 # TODO: Export all the queries outside of the main code 
 # TODO: Move the queries to the visualisation frontend - copy provoviz.org to make the user wait
+# TODO: Use http://www.chartjs.org/docs/#radar-chart
+
+# Output of tablinker (sheets parsed / nb cells / nb titles / ...)
 
 OVERVIEW = 'nb_parsed_sheets_overview'
 
