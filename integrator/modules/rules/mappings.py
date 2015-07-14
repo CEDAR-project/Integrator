@@ -1,6 +1,8 @@
 import os
 
 from rdflib.term import URIRef, Literal
+from modules.tablinker.helpers import clean_string
+
 from xlrd import open_workbook
 from xlutils.margins import number_of_good_cols, number_of_good_rows
 
@@ -26,7 +28,7 @@ class MappingsList(object):
             literal = sheet.cell(i, 1).value
             if type(literal) == type(1.0):
                 literal = str(int(literal))
-            #literal = util.clean_string(literal)
+            literal = clean_string(literal)
             
             # Get the values
             values = []
