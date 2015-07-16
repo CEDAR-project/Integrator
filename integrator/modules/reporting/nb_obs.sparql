@@ -1,0 +1,9 @@
+# Count the total number of observations
+
+PREFIX qb: <http://purl.org/linked-data/cube#>
+
+SELECT (COUNT(DISTINCT ?obs) AS ?nbobs)
+FROM __RELEASE__
+WHERE {
+	?obs a qb:Observation.
+}

@@ -1,0 +1,18 @@
+# Get the number of sheets parsed from the source files
+
+PREFIX dcat:      <http://www.w3.org/ns/dcat#>
+PREFIX dcterms:   <http://purl.org/dc/terms/>
+PREFIX prov:      <http://www.w3.org/ns/prov#>
+PREFIX tablinker: <http://bit.ly/cedar-tablink#>
+PREFIX rdfs:      <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?src ?nbsheets (COUNT(?sheet) AS ?nbsheetsparsed) 
+FROM __RAW_DATA__
+WHERE { 
+	?dataset a dcat:DataSet.
+	?dataset dcterms:hasPart ?sheet.
+	?dataset prov:wasDerivedFrom ?sourcefile.
+	?dataset rdfs:label ?src.
+	?sourcefile a dcat:DataSet.
+	?sourcefile tablinker:sheets ?nbsheets.
+} ORDER BY ?datasetname

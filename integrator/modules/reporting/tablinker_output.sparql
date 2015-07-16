@@ -1,0 +1,15 @@
+# Count the number of cell produced by TabLinker
+
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+PREFIX tablinker: <http://bit.ly/cedar-tablink#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+SELECT DISTINCT ?src ?type (COUNT(?cell) AS ?total)
+FROM __RAW_DATA__
+WHERE {
+    ?cell a ?type.
+    ?cell tablinker:value ?literal.
+    ?cell tablinker:sheet ?ds. 
+    ?dataset dcterms:hasPart ?ds.
+    ?dataset rdfs:label ?src.
+} ORDER BY ?src

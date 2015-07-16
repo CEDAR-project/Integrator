@@ -1,0 +1,11 @@
+# Count the number of triples per graph
+
+SELECT ?graph (COUNT(*) AS ?triples) 
+FROM __RELEASE__
+FROM __RULES__
+FROM __RAW_DATA__
+WHERE { 
+	GRAPH ?graph {
+		?s ?p ?o.
+	}
+}

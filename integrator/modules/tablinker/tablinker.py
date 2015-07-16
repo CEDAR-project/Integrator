@@ -26,7 +26,6 @@ from odf.style import Style
 import logging
 logger = logging.getLogger(__name__)
 
-
 class TabLinker(object):
     def __init__(self, input_file_name, output_file_name, processAnnotations=False):
         """
@@ -122,7 +121,7 @@ class TabLinker(object):
         datasetDumpURI = root + os.path.relpath(self.output_file_name)
         if self.compress_output:
             datasetDumpURI = datasetDumpURI + '.bz2' 
-        excelFileURI = root + self.input_file_name
+        odsFileURI = root + self.input_file_name
         
         # Describe the data set
         self.graph.add((datasetURI, RDF.type, DCAT.DataSet))
@@ -150,7 +149,7 @@ class TabLinker(object):
         # Describe the distribution of the source of the dataset
         self.graph.add((srcdistURI, RDF.type, DCAT.Distribution))
         self.graph.add((srcdistURI, RDFS.label, Literal(os.path.basename(self.input_file_name))))
-        self.graph.add((srcdistURI, DCTERMS.accessURL, excelFileURI))
+        self.graph.add((srcdistURI, DCTERMS.accessURL, odsFileURI))
         
         # The activity is the conversion process
         self.graph.add((activityURI, RDF.type, PROV.Activity))
@@ -160,7 +159,7 @@ class TabLinker(object):
         self.graph.add((activityURI, PROV.used, srcURI))
         
         # Save the graph
-        logger.info('[{}] Saving {} data triples'.format(self.basename,len(self.graph)))
+        logger.info('[{}] Saving {} triples'.format(self.basename,len(self.graph)))
         try :
             out = bz2.BZ2File(self.output_file_name + '.bz2', 'wb', compresslevel=9) if self.compress_output else open(self.output_file_name, "w")
             self.graph.serialize(destination=out, format='n3')
@@ -487,25 +486,3 @@ class TabLinker(object):
         # Add a cell label
         label = "%s=%s" % (cell['name'], cell['value'])
         self.graph.add((cell['URI'], RDFS.label, Literal(label)))
-        
-if __name__ == '__main__':
-    root_logger = logging.getLogger('')
-    root_logger.setLevel(logging.DEBUG)
-    logFormat = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
-        
-    ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter(logFormat))
-    root_logger.addHandler(ch)
-    
-    # Test
-    #inputFile = "data-test/gambia-wages-prices-welfare-ratio.ods"
-    #inputFile = "data-test/VT_1899_07_H1.ods"
-    inputFile = 'data-test/simple.ods'
-    outputFile = "/tmp/data.ttl"
-
-    tLinker = TabLinker(inputFile, outputFile, processAnnotations=True)
-    tLinker.set_target_namespace("http://example.com/")
-    tLinker.doLink()
-    
-
-        

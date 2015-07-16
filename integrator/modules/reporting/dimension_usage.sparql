@@ -1,0 +1,14 @@
+# Count of many observations make use of a specific dimension at least once
+
+PREFIX qb: <http://purl.org/linked-data/cube#>
+
+SELECT DISTINCT ?dimension (COUNT(?obs) AS ?nbobs)
+FROM __RELEASE__
+WHERE {
+	# We want a dimension of an observation
+	?obs a qb:Observation.
+	?obs ?dimension [].
+	# Only take in account dimensions listed in the DSD
+	?dsd a qb:DataStructureDefinition.
+	?dsd qb:component [ qb:dimension ?dimension ].
+}
