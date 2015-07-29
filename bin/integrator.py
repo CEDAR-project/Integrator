@@ -43,3 +43,7 @@ if __name__ == '__main__':
     # Step 4 : generate the release data cube, the DSD and the slices
     integrator.generate_release()
     
+    # Step 5 : generate some statistics
+    integrator.generate_statistics()
+    
+    

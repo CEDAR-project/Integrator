@@ -30,7 +30,7 @@ class StatsGenerator(object):
                               '__RELEASE__' : release_graph_name}
         self.use_cache = use_cache
         
-    def go(self):
+    def go(self, output_file_name):
         '''
         Compute all the statistics
         '''
@@ -80,7 +80,7 @@ class StatsGenerator(object):
                 'spider':{ 'label': spider_labels, 'data':spider_data}}
         tmpl_file_name = "{}/stats.html".format(os.path.dirname(__file__))
         template = Template(open(tmpl_file_name, 'r').read())
-        with open('stats.html', 'w') as outfile:
+        with open(output_file_name, 'w') as outfile:
             outfile.write(template.render(data))
 
     def _parse_results(self, results):

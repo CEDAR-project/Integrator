@@ -11,6 +11,7 @@ from modules.tablinker.tablinker import TabLinker
 from modules.rules.rulesmaker import RuleMaker
 from modules.rules.rulesinject import RulesInjector
 from modules.cube.cubemaker import CubeMaker
+from modules.reporting.stats import StatsGenerator
 
 # Define the logger
 import logging
@@ -180,6 +181,19 @@ class Integrator(object):
         pool.close()
         pool.join()
     
+    def generate_statistics(self):
+        '''
+        This pipeline step takes the data from the triple store and generate
+        some statistics out of it
+        '''
+        statsGenerator = StatsGenerator(self._conf.get_SPARQL(),
+                                self._conf.get_graph_name('raw-data'),
+                                self._conf.get_graph_name('rules'),
+                                self._conf.get_graph_name('release'))
+
+        # Go !
+        statsGenerator.go('stats.html')
+
     def _get_sheets_list(self):
         '''
         Get a list of the sheets loaded in the triple store
